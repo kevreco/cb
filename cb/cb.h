@@ -3,6 +3,9 @@
 
 #define CB_IMPLEMENTATION
 
+#include <ctype.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdarg.h> /* va_start, va_end */
 
@@ -25,8 +28,6 @@
 
 	#define CB_THREAD __thread
 #endif
-
-
 
 /* in c89 va_copy does not exist */
 #if defined(__GNUC__) || defined(__clang__)
@@ -59,11 +60,6 @@
 
 #define cb_true ((cb_bool)1)
 #define cb_false ((cb_bool)0)
-
-#include <ctype.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {

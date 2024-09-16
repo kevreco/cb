@@ -6,13 +6,13 @@ int main()
 {
     cb_init();
 
-    cb_project("foo");
-    cb_set(cbk_BINARY_TYPE, cbk_static_lib);
+    cb_project("bar");
+    cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 
     cb_add_file("src/int.c");
     cb_add_file("src/string.c");	
 
-    const char* binary_path = cb_bake("foo");
+    const char* binary_path = cb_bake("bar");
 
     cb_assert_file_exists(binary_path);
 

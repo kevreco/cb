@@ -1,4 +1,5 @@
 #define CB_IMPLEMENTATION
+#define CB_EXTENSIONS /* for cb_assert_xxx */
 #include <cb/cb.h>
 
 int main()
@@ -11,9 +12,11 @@ int main()
     cb_add_file("src/int.c");
     cb_add_file("src/string.c");	
 
-    cb_bool result = cb_bake(cb_toolchain_default(), "foo");
+    const char* library_path = cb_bake("foo");
+
+    cb_assert_file_exists(library_path);
 
     cb_destroy();
 
-	return result ? 0 : -1;
+    return 0;
 }

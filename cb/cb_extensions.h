@@ -3,4 +3,6 @@
 
 /* Include all your extensions here. CB_EXTENSIONS needs to be define next to CB_IMPLEMENTATION. */
 
+#include "../cb_extensions/cb_assert.h"
+
 #endif /* CB_EXTENSIONS_H */

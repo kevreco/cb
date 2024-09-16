@@ -1,0 +1,5 @@
+# where the builds are generated from premake or cb.bat/cb.sh
+.build/
+
+cb.bin
+cb.exe

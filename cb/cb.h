@@ -98,23 +98,38 @@ CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
 CB_API void cb_add_file(const char* filepath);
 
 typedef struct cb_toolchain cb_toolchain;
-typedef cb_bool (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
+/* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain */
+typedef const char* (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
 
 typedef struct cb_toolchain cb_toolchain;
 struct cb_toolchain {
 	cb_toolchain_bake_t bake;
+	/* Name of the toolchain, mostly for debugging purpose */
 	const char* name;
+	/* Name of the default directory, @FIXME we might be able to get rid of this. */
 	const char* default_directory_base;
 };
 
-CB_API cb_toolchain cb_toolchain_msvc();
+/* Process the current project using the default toolchain.
+   Returns the name of the result, which could be the path of a library or any other value depending on the toolchain.
+   Use the default toolchain (gcc or msvc).
+*/
+CB_API const char* cb_bake(const char* project_name);
 
-CB_API cb_bool cb_bake(cb_toolchain toolchain, const char* project_name);
-CB_API cb_bool cb_bake_and_run(cb_toolchain toolchain, const char* project_name);
+/* Same as cb_bake. Take an explicit toolchain instead of using the default one. */
+CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name);
 
-/** wildcard matching, supporting * ** ? [] */
-static cb_bool cb_wildmatch(const char* pattern, const char* str); /* forward declaration */
-CB_API void cb_wildmatch_test();
+/* Same as cb_bake, additionaly run the resulting executable (if applicable).
+   Returns NULL if project could not be baked or if the executable could not be run.
+*/
+CB_API const char* cb_bake_and_run(const char* project_name);
+
+/* Same as cb_bake_with, additionaly run the resulting executable (if applicable).
+   Returns NULL if project could not be baked or if the executable could not be run.
+*/
+CB_API const char* cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name);
+
+CB_API cb_toolchain cb_toolchain_default();
 
 CB_API cb_bool cb_subprocess(const char* cmd);
 CB_API cb_bool cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory);
@@ -146,7 +161,6 @@ extern const char* cbk_static_lib;
 #ifdef CB_IMPLEMENTATION
 #ifndef CB_IMPLEMENTATION_CPP
 #define CB_IMPLEMENTATION_CPP
-/* INTERNAL */
 
 #ifdef _WIN32
 #define CB_DEFAULT_DIR_SEPARATOR_CHAR '\\'
@@ -168,7 +182,7 @@ extern const char* cbk_static_lib;
 *   - cb_darr    - dynamic array
 *   - cb_dstr    - dynamic string
 *   - cb_kv      - key value for the multimap
-*   - cb_mmap    - multimap containg key/value strings
+*   - cb_mmap    - multimap containing key/value strings
 * # Functions of the cb library
 *   - cb_project(...) - @TODO explanation
 *   - cb_set(...)     - @TODO explanation
@@ -177,8 +191,6 @@ extern const char* cbk_static_lib;
 * # Toolchain
 *   - msvc
 *   - gcc
-* # External libraries 
-*   - Wildmatch library
 */
 
 /* keys */
@@ -379,19 +391,28 @@ cb_tmp_reset(void)
 }
 
 CB_INTERNAL char*
+cb_tmp_vsprintf(const char* format, va_list args)
+{
+	va_list args_copy;
+	va_copy(args_copy, args);
+
+	int n = vsnprintf(NULL, 0, format, args);
+	CB_ASSERT(n >= 0);
+
+	char* data = cb_tmp_alloc(n + 1);
+
+	vsnprintf(data, n + 1, format, args_copy);
+
+	return data;
+}
+
+CB_INTERNAL char*
 cb_tmp_sprintf(const char* format, ...)
 {
 	va_list args;
 	va_start(args, format);
-	int n = vsnprintf(NULL, 0, format, args);
-	CB_ASSERT(n >= 0);
+	char* data = cb_tmp_vsprintf(format, args);
 	va_end(args);
-
-	char* data = cb_tmp_alloc(n + 1);
-	va_start(args, format);
-	vsnprintf(data, n + 1, format, args);
-	va_end(args);
-
 	return data;
 }
 
@@ -1805,13 +1826,21 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 		&& cb_strv_equals_str(result, comparison_value);
 }
 
-CB_API cb_bool
-cb_bake(cb_toolchain toolchain, const char* project_name)
+CB_API const char*
+cb_bake_with(cb_toolchain toolchain, const char* project_name)
 {
-	return toolchain.bake(&toolchain, project_name);
+	const char* result = toolchain.bake(&toolchain, project_name);
+	cb_log_important("%s", result);
+	return result;
 }
 
-static void
+CB_API const char*
+cb_bake(const char* project_name)
+{
+	return cb_bake_with(cb_toolchain_default(), project_name);
+}
+
+CB_INTERNAL void
 cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_output_directory)
 {
 	cb_dstr o;
@@ -1835,25 +1864,26 @@ cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_o
 	cb_dstr_destroy(&o);
 }
 
-CB_API cb_bool
-cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
+CB_API const char*
+cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 {
-	if (!cb_bake(toolchain, project_name))
+	const char* result = cb_bake_with(toolchain, project_name);
+	if (!result)
 	{
-		return cb_false;
+		return NULL;
 	}
 	
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
 	{
-		return cb_false;
+		return NULL;
 	}
 
 	if (!cb_property_equals(project, cbk_BINARY_TYPE, cbk_exe))
 	{
 		cb_log_error("Cannot use 'cb_bake_and_run' in non-executable project");
-		return cb_false;
+		return NULL;
 	}
 
 	cb_dstr str_output_dir;
@@ -1867,12 +1897,18 @@ cb_bake_and_run(cb_toolchain toolchain, const char* project_name)
 	if (!cb_subprocess_with_starting_directory(str_exe.data, str_output_dir.data))
 	{
 		/* @FIXME cleanup objects here */
-		return cb_false;
+		return NULL;
 	}
 
 	cb_dstr_destroy(&str_output_dir);
 	cb_dstr_destroy(&str_exe);
-	return cb_true;
+	return result;
+}
+
+CB_API const char*
+cb_bake_and_run(const char* project_name)
+{
+	return cb_bake_and_run_with(cb_toolchain_default(), project_name);
 }
 
 #if _WIN32
@@ -2166,17 +2202,20 @@ cb_subprocess(const char* str)
 
 /* #msvc #toolchain */
 
-CB_API cb_bool
+CB_API const char*
 cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
 	{
-		return cb_false;
+		return NULL;
 	}
 	
 	const char* _ = "  "; /* Space to separate command arguments. */
+
+	const char* artefact = ""; /* Resulting artefact path */
+
 	/* cl.exe command */
 	cb_dstr str;
 	cb_dstr_init(&str);
@@ -2229,10 +2268,12 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	ext = is_static_library ? ".lib" : ext;
 	ext = is_shared_library ? ".dll" : ext;
 
+	artefact = cb_tmp_sprintf("%s%s%s", str_ouput_path.data, project_name, ext);
+
 	/* Define binary output for executable and shared library. Static library is set with the link.exe command*/
 	if (is_exe || is_shared_library)
 	{
-		cb_dstr_append_v(&str, "/Fe", "\"", str_ouput_path.data, project_name, ext, "\"", _);
+		cb_dstr_append_v(&str, "/Fe", "\"", artefact, "\"", _);
 	}
 
 	/* Append compiler flags */
@@ -2342,7 +2383,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				if (!cb_copy_file_to_dir(dll, str_ouput_path.data))
 				{
 					/* @FIXME: Release all allocated objects here. */
-					return cb_false;
+					return NULL;
 				}
 				/* Copy .pdb if there is any. */
 				cb_try_copy_file_to_dir(pdb, str_ouput_path.data);
@@ -2356,7 +2397,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
 	{
 		/* @FIXME: Release all allocated objects here. */
-		return cb_false;
+		return NULL;
 	}
 	
 	if (is_static_library)
@@ -2365,14 +2406,14 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		/* lib.exe /OUT:output/dir/project_name.lib /LIBPATH:output/dir/ a.obj b.obj c.obj etc. */
 		cb_dstr_append_v(&str,
 			"lib.exe", _,
-			"/OUT:", str_ouput_path.data, project_name, ext, _,
+			"/OUT:", artefact, _,
 			"/LIBPATH:", str_ouput_path.data, _, str_obj.data); /* @TODO add space here? */
 	
 		if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
 		{
 			/* @FIXME: Release all allocated objects here. */
 			cb_log_error("Could not execute command to build static library\n");
-			return cb_false;
+			return NULL;
 		}
 	}
 
@@ -2381,7 +2422,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	cb_dstr_destroy(&str_ouput_path);
 	cb_dstr_destroy(&str_wd);
 
-	return cb_true;
+	return artefact;
 }
 
 CB_API cb_toolchain
@@ -2414,17 +2455,20 @@ cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 	return cb_strv_equals_strv(sub, rhs);
 }
 
-CB_API cb_bool
+CB_API const char*
 cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 {
 	cb_project_t* project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
 	{
-		return cb_false;
+		return NULL;
 	}
 
 	const char* _ = "  "; /* Space to separate command arguments */
+	
+	const char* artefact = NULL; /* Resulting artifact path */
+
 	/* gcc command */
 	cb_dstr str;
 	cb_dstr_init(&str);
@@ -2511,18 +2555,21 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	if (is_static_library)
 	{
+		artefact = cb_tmp_sprintf("%slib%s%s", str_ouput_path.data, project_name, ext);
 		cb_dstr_append_str(&str, "-c ");
 	}
 
 	if (is_shared_library)
 	{
 		cb_dstr_append_str(&str, "-shared ");
-		cb_dstr_append_f(&str, "-o \"%s/lib%s%s\" ", str_ouput_path.data, project_name, ext);
+		artefact = cb_tmp_sprintf("%slib%s%s", str_ouput_path.data, project_name, ext);
+		cb_dstr_append_f(&str, "-o \"%s\" ", artefact);
 	}
 
 	if (is_exe)
 	{
-		cb_dstr_append_f(&str, "-o \"%s/%s\" ", str_ouput_path.data, project_name);
+		artefact = cb_tmp_sprintf("%s/%s", str_ouput_path.data, project_name);
+		cb_dstr_append_f(&str, "-o \"%s\" ", artefact);
 	}
 
 	/* Append .c files and .obj */
@@ -2604,7 +2651,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 				if (!cb_copy_file_to_dir(so, str_ouput_path.data))
 				{
 					/* @FIXME: Release all allocated objects here. */
-					return cb_false;
+					return NULL;
 				}
 			}
 		}
@@ -2616,7 +2663,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
 	{
 		/* @FIXME: Release all allocated objects here. */
-		return cb_false;
+		return NULL;
 	}
 
 	if (is_exe && cb_path_exists(project_name))
@@ -2641,11 +2688,11 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		/* move executable to the output directory */
 		if (!cb_move_file(abs_generated_file.data, str.data))
 		{
-			return cb_false;
+			return NULL;
 		}
 	}
 
-	if (is_static_library || is_shared_library)
+	else if (is_static_library || is_shared_library)
 	{
 		/* Move all generated .o file in the working directory to the output directory */
 		int i = 0;
@@ -2659,7 +2706,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			if (!cb_move_file_to_dir(o_path, str_ouput_path.data))
 			{
 				/* @FIXME cleanup allocated objects */
-				return cb_false; 
+				return NULL; 
 			}
 
 			cb_tmp_restore(index);
@@ -2669,17 +2716,12 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		{
 			/* Create libXXX.a in the output directory */
 			/* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
-			cb_dstr_assign_f(&str, "ar -crs %slib%s%s %s", str_ouput_path.data, project_name, ext, str_obj.data);
+			cb_dstr_assign_f(&str, "ar -crs %s %s", artefact, str_obj.data);
 			if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
 			{
 				/* @FIXME: Release all allocated objects here. */
-				return cb_false;
+				return NULL;
 			}
-			cb_log_important("Created static library: %slib%s%s", str_ouput_path.data, project_name, ext);
-		}
-		else
-		{
-			cb_log_important("Created shared library: %slib%s%s", str_ouput_path.data, project_name, ext);
 		}
 	}
 
@@ -2687,7 +2729,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_dstr_destroy(&str_obj);
 	cb_dstr_destroy(&str_ouput_path);
 
-	return cb_true;
+	return artefact;
 }
 
 CB_API cb_toolchain

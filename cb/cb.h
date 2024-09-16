@@ -1185,6 +1185,25 @@ cb_rfind2(cb_strv s, char c1, char c2)
 	return end < begin ? CB_NPOS : (end - begin);
 }
 
+/* Get parent directory from a path */
+CB_INTERNAL cb_strv
+cb_path_directory(cb_strv path)
+{
+	int pos = cb_rfind2(path, '/', '\\');
+	if (pos != CB_NPOS && pos > 0) {
+		return cb_strv_make(path.data
+			, pos && cb_is_directory_separator(path.data[pos -1]) ? pos  : pos + 1 /* Return the result with the trailing slash if there is one */
+		);
+	}
+	return path;
+}
+
+CB_INTERNAL cb_strv
+cb_path_directory_str(const char* str)
+{
+	return cb_path_directory(cb_strv_make_str(str));
+}
+
 CB_INTERNAL cb_strv
 cb_path_filename(cb_strv path)
 {
@@ -1882,26 +1901,20 @@ cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 
 	if (!cb_property_equals(project, cbk_BINARY_TYPE, cbk_exe))
 	{
-		cb_log_error("Cannot use 'cb_bake_and_run' in non-executable project");
+		cb_log_error("Cannot use 'cb_bake_and_run_with' for non-executable project");
 		return NULL;
 	}
 
-	cb_dstr str_output_dir;
-	cb_dstr_init(&str_output_dir);
-	cb_dstr_add_output_path(&str_output_dir, project, toolchain.default_directory_base);
+	CB_ASSERT(cb_path_exists(result));
 
-	cb_dstr str_exe;
-	cb_dstr_init(&str_exe);
+	const char* output_dir = cb_tmp_strv_to_str(cb_path_directory_str(result));
+
 	/* Run executable */
-	cb_dstr_append_v(&str_exe, str_output_dir.data, project_name);
-	if (!cb_subprocess_with_starting_directory(str_exe.data, str_output_dir.data))
+	if (!cb_subprocess_with_starting_directory(result, output_dir))
 	{
-		/* @FIXME cleanup objects here */
 		return NULL;
 	}
 
-	cb_dstr_destroy(&str_output_dir);
-	cb_dstr_destroy(&str_exe);
 	return result;
 }
 

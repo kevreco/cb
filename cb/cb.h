@@ -2377,10 +2377,10 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 			cb_bool link_project_is_shared_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib);
 			cb_bool link_project_is_static_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib);
 
-			if (link_project_is_static_libary || link_project_is_shared_libary)
-			{
-				cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
+			cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
 
+			if (link_project_is_static_libary || link_project_is_shared_libary )
+			{
 				/* /LIBPATH:"output/dir/" "mlib.lib" */
 				cb_dstr_append_v(&str, "/LIBPATH:", "\"", linked_output_dir.data, "\"", _ ,"\"");
 				cb_dstr_append_strv(&str, linked_project_name);
@@ -2389,15 +2389,36 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 			if (link_project_is_shared_libary)
 			{
-				const char* dll = cb_tmp_sprintf("%s%.*s.dll", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
-				const char* pdb = cb_tmp_sprintf("%s%.*s.pdb", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
+				const char* path = cb_tmp_sprintf("%s%.*s", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
+				const char* dll = cb_tmp_sprintf("%s.dll", path);
+				const char* lib = cb_tmp_sprintf("%s.lib", path);
+				const char* obj = cb_tmp_sprintf("%s.obj", path);
+				const char* pdb = cb_tmp_sprintf("%s.pdb", path);
+				const char* exp = cb_tmp_sprintf("%s.exp", path);
 
-				/* TODO create copy_files_to_dir */
 				if (!cb_copy_file_to_dir(dll, str_ouput_path.data))
 				{
 					/* @FIXME: Release all allocated objects here. */
 					return NULL;
 				}
+				if (!cb_copy_file_to_dir(obj, str_ouput_path.data))
+				{
+					/* @FIXME: Release all allocated objects here. */
+					return NULL;
+				}
+				if (!cb_copy_file_to_dir(exp, str_ouput_path.data))
+				{
+					cb_log_warning("Missing .exp. Shared libraries usually need to have some symbol exported with '__declspec(dllexport)'");
+					/* @FIXME: Release all allocated objects here. */
+					return NULL;
+				}
+				if (!cb_copy_file_to_dir(lib, str_ouput_path.data))
+				{
+					cb_log_warning("Missing .lib file. Shared libraries must create a .lib file for other program to be linked with at compile time.");
+					/* @FIXME: Release all allocated objects here. */
+					return NULL;
+				}
+
 				/* Copy .pdb if there is any. */
 				cb_try_copy_file_to_dir(pdb, str_ouput_path.data);
 			}

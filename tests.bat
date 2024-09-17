@@ -10,9 +10,16 @@ for /R "./" %%f in (cb.c) do (
 		@REM Go to the cb.c directory
 		cd %%~dpf
 		@REM Execute cb.bat on the current cb.c
-		call %cb_bat%
+		call %cb_bat% || goto fail
     )
 )
 
+
 @REM Restore root directory
 cd %root_dir%
+exit /B 0
+
+:fail
+
+cd %root_dir%
+exit /B 1

@@ -4,6 +4,10 @@
 
 int main()
 {
+
+/* @FIXME Only compile this for windows for now, because the linux version require the X library. */
+#ifdef _WIN32
+
     cb_init();
 
     cb_project("gui");
@@ -17,6 +21,8 @@ int main()
     cb_assert_file_exists(binary_path);
 
     cb_destroy();
+
+#endif /* _WIN32 */
 
     return 0;
 }

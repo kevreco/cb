@@ -9,9 +9,13 @@ for f in $(find $(realpath .)/tests/ -iname "cb.c") ; do
   # Go to the cb.c directory
   cd $(dirname $f)
   # Execute cb.sh on the current cb.c
-  $cb_sh
+  $cb_sh || { exited=1; break; }
   
 done
 
 # Restore directory
 cd $root_dir
+
+if [ -v exited ]; then
+   exit 1;
+fi

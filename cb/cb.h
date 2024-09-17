@@ -1909,8 +1909,11 @@ cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 
 	const char* output_dir = cb_tmp_strv_to_str(cb_path_directory_str(result));
 
+	/* Place executable path in quotes in case it contains spaces. */
+	const char* result_with_quotes = cb_tmp_sprintf("\"%s\"", result);
+
 	/* Run executable */
-	if (!cb_subprocess_with_starting_directory(result, output_dir))
+	if (!cb_subprocess_with_starting_directory(result_with_quotes, output_dir))
 	{
 		return NULL;
 	}
@@ -2335,9 +2338,9 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 			cb_strv basename = cb_path_basename(current.u.strv);
 
+			cb_dstr_append_str(&str_obj, "\"");
 			cb_dstr_append_strv(&str_obj, basename);
-			cb_dstr_append_str(&str_obj, ".obj");
-			cb_dstr_append_str(&str_obj, _);
+			cb_dstr_append_v(&str_obj, ".obj", "\"", _);
 		}
 	}
 
@@ -2440,8 +2443,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		/* lib.exe /OUT:output/dir/project_name.lib /LIBPATH:output/dir/ a.obj b.obj c.obj etc. */
 		cb_dstr_append_v(&str,
 			"lib.exe", _,
-			"/OUT:", artefact, _,
-			"/LIBPATH:", str_ouput_path.data, _, str_obj.data); /* @TODO add space here? */
+			"/OUT:", "\"", artefact, "\"", _,
+			"/LIBPATH:", "\"", str_ouput_path.data, "\"", _, str_obj.data, _);
 	
 		if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
 		{
@@ -2602,7 +2605,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	if (is_exe)
 	{
-		artefact = cb_tmp_sprintf("%s/%s", str_ouput_path.data, project_name);
+		artefact = cb_tmp_sprintf("%s%s", str_ouput_path.data, project_name);
 		cb_dstr_append_f(&str, "-o \"%s\" ", artefact);
 	}
 
@@ -2750,7 +2753,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		{
 			/* Create libXXX.a in the output directory */
 			/* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
-			cb_dstr_assign_f(&str, "ar -crs %s %s", artefact, str_obj.data);
+			cb_dstr_assign_f(&str, "ar -crs \"%s\" %s", artefact, str_obj.data);
 			if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
 			{
 				/* @FIXME: Release all allocated objects here. */

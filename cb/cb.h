@@ -72,26 +72,40 @@ CB_API void cb_init();
 CB_API void cb_destroy();
 
 typedef struct cb_project_t cb_project_t;
+
 /* Set or create current project.  */
 CB_API cb_project_t* cb_project(const char* name); 
 
 /* Add value for the specific key. */
 CB_API void cb_add(const char* key, const char* value);
+
 /* Wrapper of cb_set with string formatting */
 CB_API void cb_add_f(const char* key, const char* fmt, ...);
 
+/* Add multiple values for the specific key. */
+CB_API void cb_add_many(const char* key, const char* values[], size_t count);
+
+/* Add multiple values using var args macro */
+#define cb_add_many_v(key, ...) \
+	cb_add_many(key \
+    , (const char* []) { __VA_ARGS__ } \
+	, (sizeof((const char* []) { __VA_ARGS__ }) / sizeof(const char*)))
+
 /* Remove all previous values according to the key and set the new one. */
 CB_API void cb_set(const char* key, const char* value);
+
 /* Wrapper around cb_set with string formatting */
 CB_API void cb_set_f(const char* key, const char* fmt, ...);
 
 /* Remove all values associated with the key. Returns number of removed values */
 CB_API int cb_remove_all(const char* key);
+
 /* Wrapper around cb_remove_all with string formatting */
 CB_API int cb_remove_all_f(const char* key, const char* fmt, ...);
 
 /* Remove item with the exact key and value. */
 CB_API cb_bool cb_remove_one(const char* key, const char* value);
+
 /* Wrapper around cb_remove_one with string formatting */
 CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
 
@@ -1711,13 +1725,25 @@ CB_API cb_project_t* cb_project(const char* name)
 }
 
 CB_API void
+cb_add_many(const char* key, const char* strings[], size_t count)
+{
+	size_t i;
+
+	for (i = 0; i < count; ++i)
+	{
+		const char* value = strings[i];
+		cb_project_t* p = cb__current_project();
+
+		cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
+
+		cb_mmap_insert(&p->mmap, kv);
+	}
+}
+
+CB_API void
 cb_add(const char* key, const char* value)
 {
-	cb_project_t* p = cb__current_project();
-
-	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
-
-	cb_mmap_insert(&p->mmap, kv);
+	cb_add_many(key, &value, 1);
 }
 
 CB_API void

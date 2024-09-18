@@ -1450,7 +1450,9 @@ cb_copy_file(const char* src_path, const char* dest_path)
 	cb_log_debug("Copying '%s' to '%s'", src_path, dest_path);
 #ifdef _WIN32
 
-	DWORD attr = GetFileAttributesA(src_path);
+	wchar_t* src_path_w = cb_utf8_to_utf16(src_path);
+	wchar_t* dest_path_w = cb_utf8_to_utf16(dest_path);
+	DWORD attr = GetFileAttributesW(src_path_w);
 
 	if (attr == INVALID_FILE_ATTRIBUTES) {
 		cb_log_error("Could not retieve file attributes of file '%s' (%d).", src_path, GetLastError());
@@ -1459,7 +1461,7 @@ cb_copy_file(const char* src_path, const char* dest_path)
 
 	cb_bool is_directory = attr & FILE_ATTRIBUTE_DIRECTORY;
 	BOOL fail_if_exists = FALSE;
-	if (!is_directory && !CopyFileA(src_path, dest_path, fail_if_exists)) {
+	if (!is_directory && !CopyFileW(src_path_w, dest_path_w, fail_if_exists)) {
 		cb_log_error("Could not copy file '%s', %lu", src_path, GetLastError());
 		return cb_false;
 	}
@@ -2395,16 +2397,10 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				const char* path = cb_tmp_sprintf("%s%.*s", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
 				const char* dll = cb_tmp_sprintf("%s.dll", path);
 				const char* lib = cb_tmp_sprintf("%s.lib", path);
-				const char* obj = cb_tmp_sprintf("%s.obj", path);
 				const char* pdb = cb_tmp_sprintf("%s.pdb", path);
 				const char* exp = cb_tmp_sprintf("%s.exp", path);
 
 				if (!cb_copy_file_to_dir(dll, str_ouput_path.data))
-				{
-					/* @FIXME: Release all allocated objects here. */
-					return NULL;
-				}
-				if (!cb_copy_file_to_dir(obj, str_ouput_path.data))
 				{
 					/* @FIXME: Release all allocated objects here. */
 					return NULL;

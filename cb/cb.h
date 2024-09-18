@@ -68,10 +68,16 @@ extern "C" {
 typedef unsigned int cb_id; /* hashed key */
 typedef unsigned int cb_bool;
 
+/* All various typedef since c89 does not allow typedef redefinition */
+typedef struct cb_toolchain cb_toolchain;
+typedef struct cb_project_t cb_project_t;
+typedef struct cb_strv cb_strv;
+typedef struct cb_darr cb_darr;
+typedef struct cb_kv cb_kv;
+typedef struct cb_context cb_context;
+
 CB_API void cb_init();
 CB_API void cb_destroy();
-
-typedef struct cb_project_t cb_project_t;
 
 /* Set or create current project.  */
 CB_API cb_project_t* cb_project(const char* name); 
@@ -85,11 +91,16 @@ CB_API void cb_add_f(const char* key, const char* fmt, ...);
 /* Add multiple values for the specific key. */
 CB_API void cb_add_many(const char* key, const char* values[], size_t count);
 
+/* Add multiple string values must end with a null value */
+CB_API void cb_add_many_vnull(const char* key, ...);
+
 /* Add multiple values using var args macro */
+#if (__STDC_VERSION__ >= 199901L) /* C99 or later */
 #define cb_add_many_v(key, ...) \
 	cb_add_many(key \
     , (const char* []) { __VA_ARGS__ } \
 	, (sizeof((const char* []) { __VA_ARGS__ }) / sizeof(const char*)))
+#endif
 
 /* Remove all previous values according to the key and set the new one. */
 CB_API void cb_set(const char* key, const char* value);
@@ -111,11 +122,9 @@ CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
 
 CB_API void cb_add_file(const char* filepath);
 
-typedef struct cb_toolchain cb_toolchain;
 /* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain */
 typedef const char* (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
 
-typedef struct cb_toolchain cb_toolchain;
 struct cb_toolchain {
 	cb_toolchain_bake_t bake;
 	/* Name of the toolchain, mostly for debugging purpose */
@@ -224,7 +233,6 @@ const char* cbk_shared_lib = "shared_library";
 const char* cbk_static_lib = "static_library";
 
 /* string view */
-typedef struct cb_strv cb_strv;
 struct cb_strv {
 	int size;
 	const char* data;
@@ -234,7 +242,6 @@ struct cb_strv {
  * NOTE: cb_darr needs to start with the same component as cb_strv
  * because we need to compare them in the same way in cb_kv 
  */
-typedef struct cb_darr cb_darr;
 struct cb_darr {
 	int size;
     char* data;
@@ -301,7 +308,6 @@ typedef cb_darr cb_dstr;
 typedef char* cb_darr_it;
 
 /* key/value data used in the map and mmap struct */
-typedef struct cb_kv cb_kv;
 struct cb_kv
 {
 	cb_id hash; /* hash of the key */
@@ -328,9 +334,6 @@ struct {                \
 
 typedef cb_rangeT(cb_kv) cb_kv_range;
 
-typedef struct cb_context cb_context; /* forward declaration */
-
-typedef struct cb_project_t cb_project_t;
 struct cb_project_t {
 	cb_context* context;
 	cb_id id;
@@ -339,7 +342,6 @@ struct cb_project_t {
 	cb_mmap mmap; /* multi map of strings - when you want to have multiple values per key */
 };
 
-typedef struct cb_context cb_context;
 /* context, the root which hold everything */
 struct cb_context {
 	cb_mmap projects;
@@ -1738,6 +1740,22 @@ cb_add_many(const char* key, const char* strings[], size_t count)
 
 		cb_mmap_insert(&p->mmap, kv);
 	}
+}
+
+CB_API void
+cb_add_many_vnull(const char* key, ...)
+{
+	va_list args;
+	va_start(args, key);
+
+	const char* current = va_arg(args, const char*);
+	CB_ASSERT(current);
+	while (current)
+	{
+		cb_add_many(key, &current, 1);
+		current = va_arg(args, const char*);
+	}
+	va_end(args);
 }
 
 CB_API void

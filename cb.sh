@@ -17,7 +17,8 @@ while (( "$#" )); do
     if [ "$1" == "run" ];    then cb_run=1; fi    
     if [ "$1" == "--file" ]; then cb_file=$2; shift; fi
     if [ "$1" == "--output" ]; then cb_output=$2; shift; fi 
-	if [ "$1" == "--include-dir" ]; then cb_include_dir=$2; shift; fi 
+    if [ "$1" == "--include-dir" ]; then cb_include_dir=$2; shift; fi
+    if [ "$1" == "--cxflags" ]; then cb_cxflags=$2; shift; fi 
     shift
 
 done
@@ -29,7 +30,7 @@ fi
 
 # Check if there is a value in cb_gcc.
 if [ -v cb_gcc ]; then
-   $cb_compiler -std=c89 -g -I $cb_include_dir -o $cb_output -O0 $cb_file || { echo "'$cb_compiler' exited with $?"; exit 1; }
+   $cb_compiler $cb_cxflags -g -I $cb_include_dir -o $cb_output -O0 $cb_file || { echo "'$cb_compiler' exited with $?"; exit 1; }
 fi
 
 # Check if there is a value in cb_run.

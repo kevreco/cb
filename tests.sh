@@ -1,4 +1,3 @@
-
 # Get absolute path of the cb.sh script
 cb_sh=$(realpath cb.sh)
 # Get direcory of the cb.sh script
@@ -16,14 +15,14 @@ do
   # Go to the cb.c file directory
   cd "$dir"
   # Execute cb.sh on the current cb.c
-  $cb_sh || { exited=1; break; }
+  $cb_sh --cxflags -std=c89 || { exited=1; break; }
 done
 
 # Restore directory
 cd $root_dir
 
 if [ -v exited ]; then
-   exit 1;
+  exit 1;
 fi
 
 exit 0

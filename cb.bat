@@ -17,6 +17,8 @@ set cb_tmp_dir=.build\\cb\\
 set cb_output=cb.exe
 @REM inlude path to locate the "cb/cb.h" file
 set cb_include_dir=%~dp0
+@REM c or c++ flags
+set "cb_cxflags="
 
 @REM --------------------------------------------------------------------------------
 @REM Parse Arguments
@@ -34,6 +36,7 @@ IF NOT "%1"=="" (
     IF "%1"=="--include-dir"     set "cb_include_dir=%2" && SHIFT
     IF "%1"=="--tmp-dir"         set "cb_tmp_dir=%2"  && SHIFT
     IF "%1"=="--output"          set "cb_output=%2" && SHIFT
+    IF "%1"=="--cxflags"         set "cb_cxflags=%2" && SHIFT
 
     SHIFT
     GOTO :loop
@@ -77,7 +80,7 @@ if not exist %cb_tmp_dir% mkdir %cb_tmp_dir%
 @REM --------------------------------------------------------------------------------
 
 if "%cb_msvc%"=="1" (
-    cl.exe /EHsc /nologo /Zi /utf-8 /I %cb_include_dir% /Fo"%cb_tmp_dir%" /Fd"%cb_tmp_dir%"  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto error
+    cl.exe %cxflags% /EHsc /nologo /Zi /utf-8 /I %cb_include_dir% /Fo"%cb_tmp_dir%" /Fd"%cb_tmp_dir%"  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto error
 )
 
 if "%cb_clang%"=="1" (

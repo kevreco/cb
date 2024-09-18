@@ -390,6 +390,8 @@ static CB_THREAD char cb_tmp_buffer[CB_TMP_CAPACITY] = { 0 };
 CB_INTERNAL void*
 cb_tmp_alloc(int size)
 {
+	void* data = NULL;
+
 	CB_ASSERT((cb_tmp_size + size <= CB_TMP_CAPACITY) && "Size of the temporary allocator is too small. Increase it if needed.");
 
 	if (cb_tmp_size + size > CB_TMP_CAPACITY)
@@ -397,7 +399,7 @@ cb_tmp_alloc(int size)
 		return NULL;
 	}
 
-	void* data = &cb_tmp_buffer[cb_tmp_size];
+	data = &cb_tmp_buffer[cb_tmp_size];
 	cb_tmp_size += size;
 	return data;
 }
@@ -412,12 +414,16 @@ CB_INTERNAL char*
 cb_tmp_vsprintf(const char* format, va_list args)
 {
 	va_list args_copy;
+	int n = 0;
+	char* data = NULL;
+
 	va_copy(args_copy, args);
 
-	int n = vsnprintf(NULL, 0, format, args);
+	n = vsnprintf(NULL, 0, format, args);
+
 	CB_ASSERT(n >= 0);
 
-	char* data = cb_tmp_alloc(n + 1);
+	data = cb_tmp_alloc(n + 1);
 
 	vsnprintf(data, n + 1, format, args_copy);
 
@@ -428,8 +434,9 @@ CB_INTERNAL char*
 cb_tmp_sprintf(const char* format, ...)
 {
 	va_list args;
+	char* data = NULL;
 	va_start(args, format);
-	char* data = cb_tmp_vsprintf(format, args);
+	data = cb_tmp_vsprintf(format, args);
 	va_end(args);
 	return data;
 }
@@ -503,12 +510,14 @@ cb_darr__get_new_capacity(const cb_darr* arr, int sz)
 CB_INTERNAL void
 cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 {
+	char* new_data = NULL;
+
 	if (new_capacity <= arr->capacity)
 	{
 		return;
 	}
 
-	char* new_data = (char*)CB_MALLOC((size_t)new_capacity * sizeof_value);
+	new_data = (char*)CB_MALLOC((size_t)new_capacity * sizeof_value);
 	CB_ASSERT(new_data);
 	if (arr->data != NULL) {
 		memcpy(new_data, arr->data, (size_t)arr->size * sizeof_value);
@@ -701,19 +710,21 @@ CB_INTERNAL void cb_dstr_clear(cb_dstr* dstr) { if (dstr->data != cb_empty_strin
 CB_INTERNAL void
 cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
 {
-	assert(new_string_capacity > s->capacity && "You should request more capacity, not less."); /* ideally we should ensure this before this call. */
+	int new_mem_capacity = new_string_capacity + 1;
+	char* new_data = NULL;
+
+	CB_ASSERT(new_string_capacity > s->capacity && "You should request more capacity, not less."); /* ideally we should ensure this before this call. */
 	
 	if (new_string_capacity <= s->capacity)
 		return; 
 
-	int new_mem_capacity = new_string_capacity + 1;
-	char* new_data = (char*)CB_MALLOC((size_t)new_mem_capacity * sizeof(char));
+	new_data = (char*)CB_MALLOC((size_t)new_mem_capacity * sizeof(char));
 	if (s->size)
 	{
-		int size_plus_null_term = s->size + 1;
-		memcpy(new_data, s->data, (size_t)size_plus_null_term * sizeof(char));
+		memcpy(new_data, s->data, (size_t)(s->size + 1) * sizeof(char)); /* +1 is for null-terminated string char */
 		CB_FREE(s->data);
 	}
+
 	s->data = new_data;
 	s->capacity = new_string_capacity;
 }
@@ -740,10 +751,11 @@ CB_INTERNAL int
 cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_list args)
 {
 	va_list args_copy;
+	int add_len = 0;
 	va_copy(args_copy, args);
 
 	/* Caluclate necessary len */
-	int add_len = vsnprintf(NULL, 0, fmt, args_copy);
+	add_len = vsnprintf(NULL, 0, fmt, args_copy);
 	CB_ASSERT(add_len >= 0);
 
 	cb_dstr__grow_if_needed(s, s->size + add_len);
@@ -802,8 +814,10 @@ CB_INTERNAL int
 cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 {
 	va_list args;
+	int len = 0;
+
 	va_start(args, fmt);
-	int len = cb_dstr_append_from_fv(s, s->size, fmt, args);
+	len = cb_dstr_append_from_fv(s, s->size, fmt, args);
 	va_end(args);
 	return len;
 }
@@ -1045,8 +1059,9 @@ CB_INTERNAL const void*
 cb_mmap_get_ptr(cb_mmap* map, cb_strv key, const void* default_value)
 {
 	cb_kv key_item;
-	cb_kv_init(&key_item, key);
 	cb_kv result;
+
+	cb_kv_init(&key_item, key);
 
 	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.ptr : default_value;
 }
@@ -1055,8 +1070,9 @@ CB_INTERNAL cb_strv
 cb_mmap_get_strv(cb_mmap* map, cb_strv key, cb_strv default_value)
 {
 	cb_kv key_item;
-	cb_kv_init(&key_item, key);
 	cb_kv result;
+
+	cb_kv_init(&key_item, key);
 
 	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.strv : default_value;
 }
@@ -1134,10 +1150,9 @@ cb_create_project(const char* name)
 CB_INTERNAL cb_project_t*
 cb__current_project()
 {
+	CB_ASSERT(current_ctx);
 	CB_ASSERT(current_ctx->current_project);
-	cb_project_t* p = current_ctx->current_project;
-	CB_ASSERT(p);
-	return p;
+	return current_ctx->current_project;
 };
 
 /* API */
@@ -1178,10 +1193,12 @@ CB_INTERNAL cb_bool cb_is_directory_separator(char c) { return (c == '/' || c ==
 CB_INTERNAL int
 cb_rfind(cb_strv s, char c)
 {
+	const char* begin = NULL;
+	const char* end = NULL;
 	if (s.size == 0) return CB_NPOS;
 
-	const char* begin = s.data;
-	const char* end = s.data + s.size - 1;
+	begin = s.data;
+	end = s.data + s.size - 1;
 	while (end >= begin && *end != c)
 	{
 		end--;
@@ -1192,10 +1209,12 @@ cb_rfind(cb_strv s, char c)
 CB_INTERNAL int
 cb_rfind2(cb_strv s, char c1, char c2)
 {
+	const char* begin = NULL;
+	const char* end = NULL;
 	if (s.size == 0) return CB_NPOS;
 
-	const char* begin = s.data;
-	const char* end = s.data + s.size - 1;
+	begin = s.data;
+	end = s.data + s.size - 1;
 	while (end >= begin && *end != c1 && *end != c2)
 	{
 		end--;
@@ -1371,13 +1390,15 @@ cb_path_is_absolute(cb_strv path)
 CB_INTERNAL cb_bool
 cb_path_get_absolute(const char* path, cb_dstr* abs_path)
 {
+	char buffer[FILENAME_MAX];
+	int i = 0;
+
 	if (!cb_path_is_absolute(cb_strv_make_str(path)))
 	{
 		/* skip ./ or .\ */
 		if (path[0] == '.' && (path[1] == '\\' || path[1] == '/'))
 			path += 2;
 
-		char buffer[FILENAME_MAX];
 		getcwd(buffer, FILENAME_MAX);
 		if (buffer == NULL)
 			return cb_false;
@@ -1389,7 +1410,7 @@ cb_path_get_absolute(const char* path, cb_dstr* abs_path)
 
 	cb_dstr_append_str(abs_path, path);
 
-	int i = 2; /* start at 2 to dealing with volume name. */
+	i = 2; /* start at 2 to dealing with volume name. */
 	/* Replace slash with the preferred one. */
 	while (i < abs_path->size)
 	{
@@ -1407,6 +1428,14 @@ cb_path_get_absolute(const char* path, cb_dstr* abs_path)
 CB_INTERNAL void
 cb_create_directories_core(const char* path, int size)
 {
+#ifdef _WIN32
+	typedef wchar_t tchar;
+	wchar_t* str = NULL;
+#else
+	typedef char tchar;
+	char* str = NULL;
+#endif
+
 	if (path == NULL || size <= 0) {
 		cb_log_error("Could not create directory. Path is empty.");
 		return;
@@ -1416,12 +1445,11 @@ cb_create_directories_core(const char* path, int size)
 		cb_log_error("Could not create directory. Path is too long '%s'.", path);
 		return;
 	}
+
 #ifdef _WIN32
-	typedef wchar_t tchar;
-	wchar_t* str = (wchar_t*)cb_utf8_to_utf16(path);
+	str = (wchar_t*)cb_utf8_to_utf16(path);
 #else
-	typedef char tchar;
-	char* str = (char*)path;
+	str = (char*)path;
 #endif
 
 	if (!cb_path__exists(str))
@@ -1463,10 +1491,10 @@ cb_create_directories(const char* path, int size)
 CB_INTERNAL cb_bool
 cb_copy_file(const char* src_path, const char* dest_path)
 {
+#ifdef _WIN32
 	/* create target directory if it does not exists */
 	cb_create_directories(dest_path, strlen(dest_path));
 	cb_log_debug("Copying '%s' to '%s'", src_path, dest_path);
-#ifdef _WIN32
 
 	wchar_t* src_path_w = cb_utf8_to_utf16(src_path);
 	wchar_t* dest_path_w = cb_utf8_to_utf16(dest_path);
@@ -1488,6 +1516,17 @@ cb_copy_file(const char* src_path, const char* dest_path)
 
 	int src_fd = -1;
 	int dst_fd = -1;
+	struct stat src_stat;
+	off_t sendfile_off = 0;
+	int64_t send_result = 0;
+	int64_t total_bytes_copied = 0;
+	int64_t bytes_copied = 0;
+	int64_t bytes_left = 0;
+
+	/* create target directory if it does not exists */
+	cb_create_directories(dest_path, strlen(dest_path));
+	cb_log_debug("Copying '%s' to '%s'", src_path, dest_path);
+
 	src_fd = open(src_path, O_RDONLY);
 	if (src_fd < 0)
 	{
@@ -1495,7 +1534,6 @@ cb_copy_file(const char* src_path, const char* dest_path)
 		return cb_false;
 	}
 	
-    struct stat src_stat;
     if (fstat(src_fd, &src_stat) < 0)
 	{
         cb_log_error("Could not get fstat of file '%s': %s", src_path, strerror(errno));
@@ -1512,17 +1550,17 @@ cb_copy_file(const char* src_path, const char* dest_path)
 		return cb_false;
 	}
 	
-    int64_t total_bytes_copied = 0;
-    int64_t bytes_left = src_stat.st_size;
+    total_bytes_copied = 0;
+    bytes_left = src_stat.st_size;
     while (bytes_left > 0)
     {
-		off_t sendfile_off = total_bytes_copied;
-		int64_t send_result = sendfile(dst_fd, src_fd, &sendfile_off, bytes_left);
+		sendfile_off = total_bytes_copied;
+		send_result = sendfile(dst_fd, src_fd, &sendfile_off, bytes_left);
 		if(send_result <= 0)
 		{
 			break;
 		}
-		int64_t bytes_copied = (int64_t)send_result;
+		bytes_copied = (int64_t)send_result;
 		bytes_left -= bytes_copied;
 		total_bytes_copied += bytes_copied;
     }
@@ -1536,20 +1574,20 @@ cb_copy_file(const char* src_path, const char* dest_path)
 CB_INTERNAL cb_bool
 cb_try_copy_file_to_dir(const char* file, const char* directory)
 {
-	if (!cb_path_exists(file))
+	cb_bool result = 0;
+	int tmp_index = cb_tmp_save();
+	cb_strv filename;
+	const char* destination_file = 0;
+
+	if (cb_path_exists(file))
 	{
-		return cb_false;
+		filename = cb_path_filename_str(file);
+		destination_file = cb_tmp_sprintf("%s%.*s", directory, filename.size, filename.data);
+
+		result = cb_copy_file(file, destination_file);
 	}
 
-	int index = cb_tmp_save();
-
-	cb_strv filename = cb_path_filename_str(file);
-	const char* destination_file = cb_tmp_sprintf("%s%.*s", directory, filename.size, filename.data);
-
-	cb_bool result = cb_copy_file(file, destination_file);
-
-	cb_tmp_restore(index);
-
+	cb_tmp_restore(tmp_index);
 	return result;
 }
 
@@ -1569,16 +1607,18 @@ CB_INTERNAL cb_bool
 cb_delete_file(const char* src_path)
 {
 	cb_bool result = 0;
+	int tmp_index = cb_tmp_save();
 	cb_log_debug("Deleting file '%s'.", src_path);
 #ifdef _WIN32
-	int index = cb_tmp_save();
 	result = DeleteFileW(cb_utf8_to_utf16(src_path));
-	cb_tmp_restore(index);
 #else
 	result = remove(src_path) != -1;
 #endif
-	if (!result)
+	if (!result) {
 		cb_log_debug("Could not delete file '%s'.", src_path);
+	}
+
+	cb_tmp_restore(tmp_index);
 
 	return result;
 }
@@ -1911,9 +1951,10 @@ CB_INTERNAL void
 cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_output_directory)
 {
 	cb_dstr o;
+	cb_strv out_dir;
+
 	cb_dstr_init(&o);
 
-	cb_strv out_dir;
 	if (try_get_property_strv(project, cbk_OUTPUT_DIR, &out_dir))
 	{
 		cb_dstr_append_v(&o, out_dir.data);

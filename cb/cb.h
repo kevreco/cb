@@ -988,6 +988,8 @@ cb_mmap_get_range_str(const cb_mmap* m, const char* key)
 CB_INTERNAL cb_bool
 cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 {
+	memset(next, 0, sizeof(cb_kv));
+
 	CB_ASSERT(range->begin <= range->end);
 
 	if (range->begin < range->end)
@@ -1637,18 +1639,19 @@ cb_move_file(const char* src_path, const char* dest_path)
 CB_INTERNAL cb_bool
 cb_try_move_file_to_dir(const char* file, const char* directory)
 {
-	if (!cb_path_exists(file))
-	{
-		return cb_false;
-	}
+	cb_bool result = cb_false;
+	cb_strv filename = { 0 };
+	const char* destination_file = NULL;
 
 	int index = cb_tmp_save();
+	if (cb_path_exists(file))
+	{
+		filename = cb_path_filename_str(file);
+		destination_file = cb_tmp_sprintf("%s%.*s", directory, filename.size, filename.data);
 
-	cb_strv filename = cb_path_filename_str(file);
-	const char* destination_file = cb_tmp_sprintf("%s%.*s", directory, filename.size, filename.data);
-
-	cb_bool result = cb_move_file(file, destination_file);
-
+		result = cb_move_file(file, destination_file);
+	}
+	
 	cb_tmp_restore(index);
 
 	return result;
@@ -1788,9 +1791,10 @@ CB_API void
 cb_add_many_vnull(const char* key, ...)
 {
 	va_list args;
+	const char* current = NULL;
 	va_start(args, key);
 
-	const char* current = va_arg(args, const char*);
+	current = va_arg(args, const char*);
 	CB_ASSERT(current);
 	while (current)
 	{
@@ -1975,13 +1979,18 @@ cb_dstr_add_output_path(cb_dstr* s, cb_project_t* project, const char* default_o
 CB_API const char*
 cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 {
-	const char* result = cb_bake_with(toolchain, project_name);
+	const char* result = NULL;
+	cb_project_t* project = NULL;
+	const char* output_dir = NULL;
+	const char* result_with_quotes = NULL;
+
+	result = cb_bake_with(toolchain, project_name);
 	if (!result)
 	{
 		return NULL;
 	}
 	
-	cb_project_t* project = cb_find_project_by_name_str(project_name);
+	project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
 	{
@@ -1994,12 +2003,16 @@ cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 		return NULL;
 	}
 
-	CB_ASSERT(cb_path_exists(result));
+	if (!cb_path_exists(result))
+	{
+		cb_log_error("No binary was created from project '%s'", project_name);
+		return NULL;
+	}
 
-	const char* output_dir = cb_tmp_strv_to_str(cb_path_directory_str(result));
+	output_dir = cb_tmp_strv_to_str(cb_path_directory_str(result));
 
 	/* Place executable path in quotes in case it contains spaces. */
-	const char* result_with_quotes = cb_tmp_sprintf("\"%s\"", result);
+	result_with_quotes = cb_tmp_sprintf("\"%s\"", result);
 
 	/* Run executable */
 	if (!cb_subprocess_with_starting_directory(result_with_quotes, output_dir))
@@ -2208,6 +2221,21 @@ cb_fork_process(char* args[], const char* starting_directory)
 CB_API cb_bool
 cb_subprocess_with_starting_directory(const char* str, const char* starting_directory)
 {
+	cb_dstr cmd;
+	pid_t pid = CB_INVALID_PROCESS;
+	int wstatus = 0; /* pid wait status */
+	int exit_status = 0;
+	cb_darrT(const char*) args;
+	cb_strv arg; /* Current argument */
+	const char* cursor = str; /* Current position in the string command */
+	cb_dstr_init(&cmd);
+	/* cmd will be populated later, but we don't want to reallocate here
+	* to avoid getting invalid pointers.
+	*/
+	/* @FIXME maybe there is better way to create an array of args that does not involve those kind of tricks */
+	cb_dstr_reserve(&cmd, strlen(str) + 1); /* +1 for the last space */
+	cb_darrT_init(&args);
+
 	cb_log_debug("Running subprocess '%s'", str);
 	if (starting_directory && starting_directory[0])
 	{
@@ -2218,18 +2246,8 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 	fflush(stdout);
 	fflush(stderr);
 
-	cb_dstr cmd;
-	cb_dstr_init(&cmd);
-	/* cmd will be populated later, but we don't want to reallocate here
-	* to avoid getting invalid pointers.
-	*/
-	/* @FIXME maybe there is better way to create an array of args that does not involve those kind of tricks */
-	cb_dstr_reserve(&cmd, strlen(str) + 1); /* +1 for the last space */
-	cb_darrT(const char*) args;
-	cb_darrT_init(&args);
-
-	cb_strv arg;
-	const char* cursor = str;
+	/* @FIXME: we can likely avoid the cmd tmp buffer here since we can allocated temporary strings with cb_tmp_XXX */
+	cursor = str;
 	while ((cursor = cb_get_next_arg(cursor, &arg)) != NULL)
 	{
 		const char* arg_ptr = cmd.data + cmd.size;
@@ -2248,7 +2266,7 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 		cb_darrT_push_back(&args, NULL);
 	}
 
-	pid_t pid  = cb_fork_process((char**)args.darr.data, starting_directory);
+	pid = cb_fork_process((char**)args.darr.data, starting_directory);
 	if (pid == CB_INVALID_PROCESS)
 	{
 		cb_darrT_destroy(&args);
@@ -2258,7 +2276,6 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 
 	/* wait for process to be done */
 	for (;;) {
-		int wstatus = 0;
 		if (waitpid(pid, &wstatus, 0) < 0) {
 			cb_log_error("Could not wait on command (pid %d): '%s'", pid, strerror(errno));
 			cb_darrT_destroy(&args);
@@ -2267,7 +2284,7 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 		}
 
 		if (WIFEXITED(wstatus)) {
-			int exit_status = WEXITSTATUS(wstatus);
+			exit_status = WEXITSTATUS(wstatus);
 			if (exit_status != 0) {
 				cb_log_error("Command exited with exit code '%d'", exit_status);
 				cb_darrT_destroy(&args);
@@ -2310,27 +2327,39 @@ cb_subprocess(const char* str)
 CB_API const char*
 cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 {
-	cb_project_t* project = cb_find_project_by_name_str(project_name);
+	cb_dstr str; /* cl.exe command */
+	cb_dstr str_obj; /* to keep track of the .obj generated and copy them.*/
+	/* @FIXME use an array of string instead to make it straigthforward to follow */
+	cb_dstr str_ouput_path; /* Output path - contains the directory path or binary file path (it just depends on how deep we are) */
+	/* @FIXME use meaningful name */
+	cb_dstr str_wd; /* Get working directory, this will be set right before calling the compiler. */
+	cb_kv_range range = { 0 };
+	cb_kv_range lflag_range = { 0 };
+	cb_strv tmp_strv = { 0 };
+	cb_kv current = { 0 };       /* Temporary kv to store results. */
+	cb_kv current_lflag = { 0 }; /* Temporary kv to linker flags. */
+	cb_strv basename = { 0 };
+	const char* artefact = "";   /* Resulting artefact path */
+	const char* ext = "";        /* Resulting artefact extension */
+	const char* _ = "  "; /* Space to separate command arguments. */
+	const char* tmp = "";
+	
+	cb_strv linked_project_name = { 0 };
+	cb_project_t* linked_project = NULL;
+	cb_dstr linked_output_dir; /* to keep track of the .obj generated */
+	const char* path_prefix = NULL;
+	cb_project_t* project = NULL;
+	project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
 	{
 		return NULL;
 	}
 	
-	const char* _ = "  "; /* Space to separate command arguments. */
-
-	const char* artefact = ""; /* Resulting artefact path */
-
-	/* cl.exe command */
-	cb_dstr str;
 	cb_dstr_init(&str);
-	
-	cb_dstr str_obj; /* to keep track of the .obj generated and copy them.*/
 	cb_dstr_init(&str_obj);
-
-	/* Output path - contains the directory path or binary file path (it just depends on how deep we are) */
-	cb_dstr str_ouput_path;
 	cb_dstr_init(&str_ouput_path);
+	cb_dstr_init(&str_wd);
 
 	/* Format output directory */
 	cb_dstr_add_output_path(&str_ouput_path, project, tc->default_directory_base);
@@ -2338,16 +2367,12 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* Create output directory if it does not exist yet. */
 	cb_create_directories(str_ouput_path.data, str_ouput_path.size);
 
-	/* Get working directory, this will be set right before calling the compiler. */
-	cb_dstr str_wd;
-	cb_dstr_init(&str_wd);
-
-	cb_strv working_dir;
-	if (try_get_property_strv(project, cbk_WORKING_DIRECTORY, &working_dir))
+	if (try_get_property_strv(project, cbk_WORKING_DIRECTORY, &tmp_strv))
 	{
-		cb_dstr_append_absolute_path(&str_wd, working_dir.data);
+		cb_dstr_append_absolute_path(&str_wd, tmp_strv.data);
 	}
 
+	/* Use /utf-8 by default since it's retrocompatible with utf-8 */
 	cb_dstr_append_v(&str, "cl.exe /utf-8", _);
 
 	/* Handle binary type */
@@ -2356,7 +2381,12 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	cb_bool is_shared_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_shared_lib);
 	cb_bool is_static_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_static_lib);
 
-	CB_ASSERT(is_exe || is_shared_library || is_static_library && "Unknown library type");
+	if (!is_exe && !is_shared_library && !is_static_library)
+	{
+		cb_log_error("Unknown binary type");
+		/* @FIXME: Release all allocated objects here. */
+		return cb_false;
+	}
 
 	if (is_static_library) {
 		cb_dstr_append_v(&str, "/c", _);
@@ -2368,7 +2398,6 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* Add output directory to cl.exe command */
 	cb_dstr_append_v(&str, "/Fo", "\"", str_ouput_path.data, "\"", _);
 
-	const char* ext = "";
 	ext = is_exe ? ".exe" : ext;
 	ext = is_static_library ? ".lib" : ext;
 	ext = is_shared_library ? ".dll" : ext;
@@ -2383,8 +2412,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append compiler flags */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_strv(&str, current.u.strv);
@@ -2394,8 +2422,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append include directories */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_v(&str, "/I", "\"");
@@ -2406,8 +2433,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	
 	/* Append preprocessor definition */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_DEFINES);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_DEFINES);
+		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_v(&str, "/D", "\"");
@@ -2419,13 +2446,13 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append files and .obj */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
+		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_v(&str, "\"", current.u.dstr.data, "\"", _);
 
-			cb_strv basename = cb_path_basename(current.u.strv);
+			basename = cb_path_basename(current.u.strv);
 
 			cb_dstr_append_str(&str_obj, "\"");
 			cb_dstr_append_strv(&str_obj, basename);
@@ -2434,44 +2461,40 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* For each linked project we add the link information to the cl.exe command */
-	cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
+	range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
 	if (range.count > 0)
 	{
-		cb_dstr linked_output_dir; /* to keep track of the .obj generated */
 		cb_dstr_init(&linked_output_dir);
 
 		cb_dstr_append_v(&str, "/link", _);
 		/* Add linker flags */
 		{
-			cb_kv_range lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
-			cb_kv lflag;
-			while (cb_mmap_range_get_next(&lflag_range, &lflag))
+			lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
 			{
-				cb_dstr_append_strv(&str, lflag.u.strv);
+				cb_dstr_append_strv(&str, current_lflag.u.strv);
 				cb_dstr_append_str(&str, _);
 			}
 		}
 
-		cb_kv current;
+		/* iterate all the linked projects */
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_strv linked_project_name = current.u.strv;
+			linked_project_name = current.u.strv;
 			cb_dstr_clear(&linked_output_dir);
 
-			cb_project_t* linked_project = cb_find_project_by_name(linked_project_name);
+			linked_project = cb_find_project_by_name(linked_project_name);
 			if (!project)
 			{
+				/* @FIXME: we should return false here */
 				continue;
 			}
 
-			CB_ASSERT(linked_project);
-
-			cb_bool link_project_is_shared_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib);
-			cb_bool link_project_is_static_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib);
-
 			cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
 
-			if (link_project_is_static_libary || link_project_is_shared_libary )
+			/* is shared or static library */
+			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib)
+				|| cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib))
 			{
 				/* /LIBPATH:"output/dir/" "mlib.lib" */
 				cb_dstr_append_v(&str, "/LIBPATH:", "\"", linked_output_dir.data, "\"", _ ,"\"");
@@ -2479,26 +2502,30 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				cb_dstr_append_v(&str, ".lib", "\"", _);
 			}
 
-			if (link_project_is_shared_libary)
+			/* is shared library */
+			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib))
 			{
-				const char* path = cb_tmp_sprintf("%s%.*s", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
-				const char* dll = cb_tmp_sprintf("%s.dll", path);
-				const char* lib = cb_tmp_sprintf("%s.lib", path);
-				const char* pdb = cb_tmp_sprintf("%s.pdb", path);
-				const char* exp = cb_tmp_sprintf("%s.exp", path);
-
-				if (!cb_copy_file_to_dir(dll, str_ouput_path.data))
+				path_prefix = cb_tmp_sprintf("%s%.*s", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
+				/* .dll */
+				tmp = cb_tmp_sprintf("%s.dll", path_prefix);
+				if (!cb_copy_file_to_dir(tmp, str_ouput_path.data))
 				{
 					/* @FIXME: Release all allocated objects here. */
 					return NULL;
 				}
-				if (!cb_copy_file_to_dir(exp, str_ouput_path.data))
+
+				/* .exp */
+				tmp = cb_tmp_sprintf("%s.exp", path_prefix);
+				if (!cb_copy_file_to_dir(tmp, str_ouput_path.data))
 				{
 					cb_log_warning("Missing .exp. Shared libraries usually need to have some symbol exported with '__declspec(dllexport)'");
 					/* @FIXME: Release all allocated objects here. */
 					return NULL;
 				}
-				if (!cb_copy_file_to_dir(lib, str_ouput_path.data))
+
+				/* .lib */
+				tmp = cb_tmp_sprintf("%s.lib", path_prefix);
+				if (!cb_copy_file_to_dir(tmp, str_ouput_path.data))
 				{
 					cb_log_warning("Missing .lib file. Shared libraries must create a .lib file for other program to be linked with at compile time.");
 					/* @FIXME: Release all allocated objects here. */
@@ -2506,7 +2533,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				}
 
 				/* Copy .pdb if there is any. */
-				cb_try_copy_file_to_dir(pdb, str_ouput_path.data);
+				tmp = cb_tmp_sprintf("%s.pdb", path_prefix);
+				cb_try_copy_file_to_dir(tmp, str_ouput_path.data);
 			}
 		}
 
@@ -2522,14 +2550,9 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	
 	if (is_static_library)
 	{
-		cb_dstr_clear(&str);
-		/* lib.exe /OUT:output/dir/project_name.lib /LIBPATH:output/dir/ a.obj b.obj c.obj etc. */
-		cb_dstr_append_v(&str,
-			"lib.exe", _,
-			"/OUT:", "\"", artefact, "\"", _,
-			"/LIBPATH:", "\"", str_ouput_path.data, "\"", _, str_obj.data, _);
-	
-		if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
+		/* lib.exe /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
+		tmp = cb_tmp_sprintf("lib.exe /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, str_ouput_path.data, str_obj.data);
+		if (!cb_subprocess_with_starting_directory(tmp, str_wd.data))
 		{
 			/* @FIXME: Release all allocated objects here. */
 			cb_log_error("Could not execute command to build static library\n");
@@ -2566,41 +2589,67 @@ cb_toolchain_msvc()
 CB_INTERNAL cb_bool
 cb_strv_ends_with(cb_strv sv, cb_strv rhs)
 {
+	cb_strv sub = { 0 };
 	if (sv.size < rhs.size)
 	{
 		return cb_false;
 	}
 
-	cb_strv sub = cb_strv_make(sv.data + (sv.size - rhs.size), rhs.size);
+	sub = cb_strv_make(sv.data + (sv.size - rhs.size), rhs.size);
 	return cb_strv_equals_strv(sub, rhs);
 }
 
 CB_API const char*
 cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 {
-	cb_project_t* project = cb_find_project_by_name_str(project_name);
+	cb_dstr str;
+	cb_dstr str_obj; /* to keep track of the .o generated */
+	cb_dstr str_ouput_path; /* Output path - contains the directory path or binary file path (it just depends on how deep we are) */
+	cb_darrT(const char*) objects; /* Contains the path of all .o objects */
+	/* @FIXME: change to a meaningful name*/
+	cb_dstr str_wd; /* Contains the path of the working directory */
 
+	cb_strv tmp_strv = {0};
+	cb_bool is_exe = cb_false;
+	cb_bool is_static_library = cb_false;
+	cb_bool is_shared_library = cb_false;
+
+	const char* ext = "";
+	cb_kv_range range = {0};
+	cb_kv current = { 0 };       /* Temporary kv to store results. */
+	cb_kv_range lflag_range = {0};
+	cb_kv current_lflag = {0};
+
+	cb_strv basename = { 0 };
+
+	cb_dstr abs_generated_file;
+	cb_dstr linked_output_dir;
+	cb_strv linked_project_name = { 0 };
+	cb_project_t* linked_project = NULL;
+	const char* tmp; /* Temp string */
+	const char* current_object = NULL;
+	int i = 0;
+	const char* _ = "  ";        /* Space to separate command arguments */
+	int tmp_index = 0;           /* to save temporary allocation index */
+	const char* artefact = NULL; /* Resulting artifact path */
+
+	cb_project_t* project = NULL;
+	
+	project = cb_find_project_by_name_str(project_name);
+	
 	if (!project)
 	{
 		return NULL;
 	}
 
-	const char* _ = "  "; /* Space to separate command arguments */
-	
-	const char* artefact = NULL; /* Resulting artifact path */
-
 	/* gcc command */
-	cb_dstr str;
+	
 	cb_dstr_init(&str);
 
-	cb_dstr str_obj; /* to keep track of the .o generated */
 	cb_dstr_init(&str_obj);
 
-	cb_darrT(const char*) objects;
 	cb_darrT_init(&objects);
 
-	/* Output path - contains the directory path or binary file path (it just depends on how deep we are) */
-	cb_dstr str_ouput_path;
 	cb_dstr_init(&str_ouput_path);
 
 	/* Format output directory */
@@ -2610,37 +2659,36 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_create_directories(str_ouput_path.data, str_ouput_path.size);
 
 	/* Get working directory, this will be set right before calling the compiler. */
-	cb_dstr str_wd;
 	cb_dstr_init(&str_wd);
 
+	if (try_get_property_strv(project, cbk_WORKING_DIRECTORY, &tmp_strv))
 	{
-		cb_strv working_dir;
-		if (try_get_property_strv(project, cbk_WORKING_DIRECTORY, &working_dir))
-		{
-			cb_dstr_append_absolute_path(&str_wd, working_dir.data);
-			cb_dstr_ensure_trailing_slash(&str_wd);
-		}
+		cb_dstr_append_absolute_path(&str_wd, tmp_strv.data);
+		cb_dstr_ensure_trailing_slash(&str_wd);
 	}
 
 	/* Start command */
 	cb_dstr_append_v(&str, "cc ", _);
 
 	/* Handle binary type */
-	cb_bool is_exe = cb_property_equals(project, cbk_BINARY_TYPE, cbk_exe);
-	cb_bool is_shared_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_shared_lib);
-	cb_bool is_static_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_static_lib);
+	is_exe = cb_property_equals(project, cbk_BINARY_TYPE, cbk_exe);
+	is_shared_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_shared_lib);
+	is_static_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_static_lib);
 
-	CB_ASSERT(is_exe || is_shared_library || is_static_library && "Unknown library type");
+	if (!is_exe && !is_shared_library && !is_static_library)
+	{
+		cb_log_error("Unknown binary type");
+		/* @FIXME: Release all allocated objects here. */
+		return cb_false;
+	}
 
-	const char* ext = "";
 	ext = is_exe ? "" : ext; /* do not provide extension to executables on linux */
 	ext = is_static_library ? ".a" : ext;
 	ext = is_shared_library ? ".so" : ext;
 
 	/* Append compiler flags */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_strv(&str, current.u.strv);
@@ -2650,8 +2698,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append include directories */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_v(&str, "-I", _, "\"");
@@ -2662,8 +2709,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append preprocessor definition */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_DEFINES);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_DEFINES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_v(&str, "-D");
@@ -2694,19 +2740,17 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append .c files and .obj */
 	{
-		cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
-		cb_kv current;
+		range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_v(&str, "\"", current.u.dstr.data, "\"", _);
 
-			cb_strv basename = cb_path_basename(current.u.strv);
+			basename = cb_path_basename(current.u.strv);
 
 			if (is_exe || is_static_library)
 			{
-				cb_dstr_append_v(&str_obj, "\"", str_ouput_path.data, );
-				cb_dstr_append_strv(&str_obj, basename);
-				cb_dstr_append_v(&str_obj, ".o", "\"", _);
+				/* output/dir/my_object.o */
+				cb_dstr_append_f(&str_obj, "\"%s%.*s.o\" ", str_ouput_path.data, basename.size, basename.data);
 
 				/* my_object.o */
 				cb_darrT_push_back(&objects, cb_tmp_sprintf("%.*s.o", basename.size, basename.data));
@@ -2715,16 +2759,15 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* For each linked project we add the link information to the gcc command */
-	cb_kv_range range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
+	range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
 	if (range.count > 0)
 	{
 		/* Add linker flags */
 		{
-			cb_kv_range lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
-			cb_kv lflag;
-			while (cb_mmap_range_get_next(&lflag_range, &lflag))
+			lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
 			{
-				cb_dstr_append_strv(&str, lflag.u.strv);
+				cb_dstr_append_strv(&str, current_lflag.u.strv);
 				cb_dstr_append_str(&str, _);
 			}
 		}
@@ -2732,43 +2775,37 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		/* Give some parameters to the linker to  look for the shared library next to the binary being built */
 		cb_dstr_append_str(&str, " -Wl,-rpath,$ORIGIN ");
 
-		cb_dstr linked_output_dir; /* to keep track of the .obj generated and copy them*/
 		cb_dstr_init(&linked_output_dir);
 
-		cb_kv current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_strv linked_project_name = current.u.strv;
+			linked_project_name = current.u.strv;
 			cb_dstr_clear(&linked_output_dir);
 
-			cb_project_t* linked_project = cb_find_project_by_name(linked_project_name);
+			linked_project = cb_find_project_by_name(linked_project_name);
 			if (!project)
 			{
+				/* @FIXME: we should return false here */
 				continue;
 			}
 
-			CB_ASSERT(linked_project);
-
-			cb_bool linked_project_is_shared_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib);
-			cb_bool linked_project_is_static_libary = cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib);
-
-			if (linked_project_is_static_libary || linked_project_is_shared_libary)
+			/* Is static lib or shared lib */
+			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib)
+				|| cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib))
 			{
 				cb_dstr_add_output_path(&linked_output_dir, linked_project, tc->default_directory_base);
 
-				/* -L "my/path/" */ 
-				cb_dstr_append_v(&str, "-L", _, "\"", linked_output_dir.data, "\"", _);
-				/* -l "my_proj" */
-				cb_dstr_append_f(&str, "-l \"%.*s\" ", linked_project_name.size, linked_project_name.data);
+				/* -L "my/path/" -l "my_proj" */ 
+				cb_dstr_append_f(&str, "-L \"%s\" -l \"%.*s\" ", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
 			}
 
-			if (linked_project_is_shared_libary)
+			/* Is shared library */
+			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib))
 			{
 				/* libmy_project.so*/
-				const char* so = cb_tmp_sprintf("%slib%.*s.so", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
+				tmp = cb_tmp_sprintf("%slib%.*s.so", linked_output_dir.data, linked_project_name.size, linked_project_name.data);
 
-				/* TODO create copy_files_to_dir */
-				if (!cb_copy_file_to_dir(so, str_ouput_path.data))
+				if (!cb_copy_file_to_dir(tmp, str_ouput_path.data))
 				{
 					/* @FIXME: Release all allocated objects here. */
 					return NULL;
@@ -2801,7 +2838,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 		cb_dstr_assign_f(&str, "%s%s", str_ouput_path.data, project_name);
 
-		cb_dstr abs_generated_file;
+		
 		cb_dstr_clear(&abs_generated_file);
 		cb_dstr_append_absolute_path(&abs_generated_file, project_name);
 
@@ -2811,33 +2848,31 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			return NULL;
 		}
 	}
-
 	else if (is_static_library || is_shared_library)
 	{
 		/* Move all generated .o file in the working directory to the output directory */
-		int i = 0;
-		for (; i < cb_darrT_size(&objects); ++i)
+
+		for (i = 0; i < cb_darrT_size(&objects); ++i)
 		{
-			const char* o = cb_darrT_at(&objects, i);
-			int index = cb_tmp_save();
+			current_object = cb_darrT_at(&objects, i);
+			tmp_index = cb_tmp_save();
 			/* /working/directory/my_lib.o */
-			const char* o_path = cb_tmp_sprintf("%s%s", str_wd.data, o);
-			
-			if (!cb_move_file_to_dir(o_path, str_ouput_path.data))
+			tmp = cb_tmp_sprintf("%s%s", str_wd.data, current_object);
+			if (!cb_move_file_to_dir(tmp, str_ouput_path.data))
 			{
 				/* @FIXME cleanup allocated objects */
-				return NULL; 
+				return NULL;
 			}
 
-			cb_tmp_restore(index);
+			cb_tmp_restore(tmp_index);
 		}
 
 		if (is_static_library)
 		{
 			/* Create libXXX.a in the output directory */
 			/* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
-			cb_dstr_assign_f(&str, "ar -crs \"%s\" %s", artefact, str_obj.data);
-			if (!cb_subprocess_with_starting_directory(str.data, str_wd.data))
+			tmp = cb_tmp_sprintf("ar -crs \"%s\" %s ", artefact, str_obj.data);
+			if (!cb_subprocess_with_starting_directory(tmp, str_wd.data))
 			{
 				/* @FIXME: Release all allocated objects here. */
 				return NULL;

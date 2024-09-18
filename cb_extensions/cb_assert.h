@@ -30,9 +30,10 @@ CB_API void
 cb_assert_file_exists_f(const char* format, ...)
 {
 	va_list args;
+	const char* str = NULL;
 	va_start(args, format);
 	
-	const char* str = cb_tmp_vsprintf(format, args);
+	str = cb_tmp_vsprintf(format, args);
 	cb_assert_file_exists(str);
 
 	va_end(args);

@@ -15,7 +15,7 @@ do
   # Go to the cb.c file directory
   cd "$dir"
   # Execute cb.sh on the current cb.c
-  $cb_sh --cxflags -std=c89 || { exited=1; break; }
+  $cb_sh --cxflags "-std=c89 -pedantic" || { exited=1; break; }
 done
 
 # Restore directory

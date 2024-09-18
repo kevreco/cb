@@ -359,13 +359,14 @@ static cb_context* current_ctx;
 CB_INTERNAL void
 cb_log(FILE* file, const char* prefix, const char* fmt, ...)
 {
-	fprintf(file, "%s", prefix);
-
 	va_list args;
 	va_start(args, fmt);
+
+	fprintf(file, "%s", prefix);
 	vfprintf(file, fmt, args);
-	va_end(args);
 	fprintf(file, "\n");
+
+	va_end(args);
 }
 
 /* NOTE: Those following macros are compatible with c99 only */

@@ -357,23 +357,24 @@ static cb_context* current_ctx;
 /*-----------------------------------------------------------------------*/
 
 CB_INTERNAL void
-cb_log(FILE* file, const char* prefix, const char* fmt, ...)
+cb_log_v(FILE* file, const char* prefix, const char* fmt, va_list args)
 {
-	va_list args;
-	va_start(args, fmt);
+	va_list args_copy;
+	va_copy(args_copy, args);
 
 	fprintf(file, "%s", prefix);
-	vfprintf(file, fmt, args);
+	vfprintf(file, fmt, args_copy);
 	fprintf(file, "\n");
-
-	va_end(args);
 }
 
-/* NOTE: Those following macros are compatible with c99 only */
-#define cb_log_error(fmt, ...)     cb_log(stderr, "[CB-ERROR] ", fmt, ##__VA_ARGS__)
-#define cb_log_warning(fmt, ...)   cb_log(stderr, "[CB-WARNING] ", fmt, ##__VA_ARGS__)
-#define cb_log_debug(fmt, ...)     cb_log(stdout, "[CB-DEBUG] ", fmt,  ##__VA_ARGS__)
-#define cb_log_important(fmt, ...) cb_log(stdout, "", fmt,  ##__VA_ARGS__)
+CB_INTERNAL void
+cb_log_error(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stderr, "[CB-ERROR] ", fmt, args); va_end(args); }
+CB_INTERNAL void
+cb_log_warning(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stderr, "[CB-WARNING] ", fmt, args); va_end(args); }
+CB_INTERNAL void
+cb_log_debug(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stdout, "[CB-DEBUG] ", fmt, args); va_end(args); }
+CB_INTERNAL void
+cb_log_important(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stdout, "", fmt, args); va_end(args); }
 
 /*-----------------------------------------------------------------------*/
 /* temporary allocation */

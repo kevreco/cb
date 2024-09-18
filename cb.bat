@@ -84,7 +84,7 @@ if "%cb_msvc%"=="1" (
 )
 
 if "%cb_clang%"=="1" (
-    echo [%cb_script%] ERROR: clang is not suported yet.
+    echo [%cb_script%] ERROR: clang is not supported yet.
     exit /b 1
 )
  

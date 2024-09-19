@@ -2799,28 +2799,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		return NULL;
 	}
 
-	if (is_exe && cb_path_exists(project_name))
-	{
-		/* set executable permission - only the ownder can read/write/execute the binary */
-		char mode_str[] = "0777";
-		int mode = strtol(mode_str, 0, 8);
-
-		if (chmod(project_name, mode) < 0)
-		{
-			cb_log_error("Could not give executable permission to '%s'.", project_name);
-			/* @FIXME: Release all allocated objects here. */
-			return cb_false;
-		}
-
-		cb_dstr_assign_f(&str, "%s%s", output_dir, project_name);
-
-		/* move executable to the output directory */
-		if (!cb_move_file(cb_path_get_absolute_file(project_name), str.data))
-		{
-			return NULL;
-		}
-	}
-	else if (is_static_library || is_shared_library)
+	if (is_static_library || is_shared_library)
 	{
 		/* Move all generated .o file in the working directory to the output directory */
 

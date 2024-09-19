@@ -7,6 +7,7 @@ root_dir=$(dirname $cb_sh)
 # read -r f is used to handle path containing spaces.
 find $(realpath ./tests/) -iname "cb.c" | while read -r f 
 do
+  echo "Starting test for: $f" 
   file=$(printf "%s" "$f")
   # Get the parent directory path.
   # We strip every char from the end to the last slash
@@ -15,7 +16,7 @@ do
   # Go to the cb.c file directory
   cd "$dir"
   # Execute cb.sh on the current cb.c
-  $cb_sh --cxflags "-std=c89 -pedantic" || { exited=1; break; }
+  $cb_sh --cxflags "-std=c89 -pedantic -Werror" || { exited=1; break; }
 done
 
 # Restore directory

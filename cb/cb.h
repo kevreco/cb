@@ -169,7 +169,6 @@ extern const char* cbk_LINK_PROJECT;      /* Other project to link. */
 extern const char* cbk_LFLAGS;            /* Extra flags to give to the linker. */
 extern const char* cbk_OUTPUT_DIR;        /* Ouput directory for the generated files. */
 extern const char* cbk_TARGET_NAME;       /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
-extern const char* cbk_WORKING_DIRECTORY; /* Working directory for a specific project. */
 /* values */
 extern const char* cbk_exe;
 extern const char* cbk_shared_lib;
@@ -2341,7 +2340,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* @FIXME use an array of string instead to make it straigthforward to follow */
 	cb_dstr str_obj; /* to keep track of the .obj generated and copy them.*/
 	const char* output_dir;       /* Output directory. Contains the directory path of the binary being created. */
-	const char* working_dir = ""; /* Working directory when subprocess are created. */
+	
 	cb_kv_range range = { 0 };
 	cb_kv_range lflag_range = { 0 };
 	cb_strv tmp_strv = { 0 };
@@ -2373,11 +2372,6 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Create output directory if it does not exist yet. */
 	cb_create_directories(output_dir, strlen(output_dir));
-
-	if (try_get_property_strv(project, cbk_WORKING_DIRECTORY, &tmp_strv))
-	{
-		working_dir = cb_path_get_absolute_dir(tmp_strv.data);
-	}
 
 	/* Use /utf-8 by default since it's retrocompatible with utf-8 */
 	cb_dstr_append_str(&str, "cl.exe /utf-8 ");
@@ -2537,7 +2531,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* execute cl.exe */
-	if (!cb_subprocess_with_starting_directory(str.data, working_dir))
+	if (!cb_subprocess_with_starting_directory(str.data, output_dir))
 	{
 		/* @FIXME: Release all allocated objects here. */
 		return NULL;
@@ -2547,7 +2541,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	{
 		/* lib.exe /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
 		tmp = cb_tmp_sprintf("lib.exe /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
-		if (!cb_subprocess_with_starting_directory(tmp, working_dir))
+		if (!cb_subprocess_with_starting_directory(tmp, output_dir))
 		{
 			/* @FIXME: Release all allocated objects here. */
 			cb_log_error("Could not execute command to build static library\n");
@@ -2600,8 +2594,6 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	const char* output_dir;        /* Output directory. Contains the directory path of the binary being created. */
 	cb_darrT(const char*) objects; /* Contains the path of all .o objects */
 
-	const char* working_directory = ""; /* working directory when subprocess are created. */
-
 	cb_strv tmp_strv = { 0 };
 	cb_bool is_exe = cb_false;
 	cb_bool is_static_library = cb_false;
@@ -2647,11 +2639,6 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Create output directory if it does not exist yet. */
 	cb_create_directories(output_dir, strlen(output_dir));
-
-	if (try_get_property_strv(project, cbk_WORKING_DIRECTORY, &tmp_strv))
-	{
-		working_directory = cb_path_get_absolute_dir(tmp_strv.data);
-	}
 
 	/* Start command */
 	cb_dstr_append_str(&str, "cc ");
@@ -2793,7 +2780,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* Example: gcc <includes> -c  <c source files> */
-	if (!cb_subprocess_with_starting_directory(str.data, working_directory))
+	if (!cb_subprocess_with_starting_directory(str.data, output_dir))
 	{
 		/* @FIXME: Release all allocated objects here. */
 		return NULL;
@@ -2801,29 +2788,12 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	if (is_static_library || is_shared_library)
 	{
-		/* Move all generated .o file in the working directory to the output directory */
-
-		for (i = 0; i < cb_darrT_size(&objects); ++i)
-		{
-			current_object = cb_darrT_at(&objects, i);
-			tmp_index = cb_tmp_save();
-			/* /working/directory/my_lib.o */
-			tmp = cb_tmp_sprintf("%s%s", working_directory, current_object);
-			if (!cb_move_file_to_dir(tmp, output_dir))
-			{
-				/* @FIXME cleanup allocated objects */
-				return NULL;
-			}
-
-			cb_tmp_restore(tmp_index);
-		}
-
 		if (is_static_library)
 		{
 			/* Create libXXX.a in the output directory */
 			/* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
 			tmp = cb_tmp_sprintf("ar -crs \"%s\" %s ", artefact, str_obj.data);
-			if (!cb_subprocess_with_starting_directory(tmp, working_directory))
+			if (!cb_subprocess_with_starting_directory(tmp, output_dir))
 			{
 				/* @FIXME: Release all allocated objects here. */
 				return NULL;

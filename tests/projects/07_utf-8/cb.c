@@ -17,9 +17,9 @@ int main()
 
         cb_add_file("src_ぁ/foo_ぁ.c");
 
-        const char* binary_path = cb_bake("foo_ぁ");
-
-        cb_assert_file_exists(binary_path);
+        cb_assert_file_exists(
+            cb_bake("foo_ぁ")
+        );
     }
 
     /* Shared library */
@@ -31,9 +31,9 @@ int main()
 
         cb_add(cbk_DEFINES, "BAR_LIB_EXPORT");
 
-        const char* binary_path = cb_bake("bar");
-
-        cb_assert_file_exists(binary_path);
+        cb_assert_file_exists(
+            cb_bake("bar")
+        );
     }
 
     /* exe */
@@ -46,9 +46,9 @@ int main()
         cb_add(cbk_LINK_PROJECT, "foo_ぁ");
         cb_add(cbk_LINK_PROJECT, "bar");
 
-        const char* binary_path = cb_bake_and_run("exe_ぁ");
-
-        cb_assert_file_exists(binary_path);
+        cb_assert_file_exists(
+            cb_bake_and_run("exe_ぁ")
+        );
     }
 
     cb_destroy();

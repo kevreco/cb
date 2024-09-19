@@ -12,9 +12,9 @@ int main()
     cb_add_file("src/int.c");
     cb_add_file("src/string.c");	
 
-    const char* binary_path = cb_bake("bar");
-
-    cb_assert_file_exists(binary_path);
+    cb_assert_file_exists(
+        cb_bake("bar")
+    );
 
     cb_destroy();
 

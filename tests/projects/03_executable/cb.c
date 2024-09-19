@@ -12,9 +12,9 @@ int main()
     cb_add_file("src/main.c");
     cb_add_file("src/value.c");
 
-    const char* binary_path = cb_bake_and_run("exe");
-
-    cb_assert_file_exists(binary_path);
+    cb_assert_file_exists(
+        cb_bake_and_run("exe")
+    );
 
     cb_destroy();
 

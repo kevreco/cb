@@ -1,12 +1,15 @@
+# OIFS and IFS are used to process path with space
+OIFS="$IFS"
+IFS=$'\n'
+
 # Get absolute path of the cb.sh script
 cb_sh=$(realpath cb.sh)
 # Get direcory of the cb.sh script
 root_dir=$(dirname $cb_sh)
 
 # Get absolute paths of the various cb.c files.
-# read -r f is used to handle path containing spaces.
-find $(realpath ./tests/) -iname "cb.c" | while read -r f 
-do
+for f in $(find $(realpath ./tests/) -iname "cb.c" ) ;
+do 
   echo "Starting test for: $f" 
   file=$(printf "%s" "$f")
   # Get the parent directory path.
@@ -15,15 +18,14 @@ do
   dir=${file%/*}
   # Go to the cb.c file directory
   cd "$dir"
-  # Execute cb.sh on the current cb.c
-  $cb_sh --cxflags "-std=c89 -pedantic -Werror" || { exited=1; break; }
+  # Execute cb.sh on the current cb.c, apprently we need to use the $((XXX)) to assigne a variable in a for loop.
+  $cb_sh --cxflags -std=c89 -pedantic -Werror || { exit_code=$((1)); break; }
 done
 
-# Restore directory
-cd $root_dir
+IFS="$OIFS"
 
-if [ -v exited ]; then
-  exit 1;
+if [ -v exit_code ]; then
+  exit $exit_code
 fi
 
-exit 0
+

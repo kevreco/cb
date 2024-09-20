@@ -4,6 +4,8 @@
 
 int main()
 {
+    const char* path = NULL;
+
     cb_init();
 
     cb_project("exe");
@@ -12,9 +14,11 @@ int main()
     cb_add(cb_FILES, "src/main.c");
     cb_add(cb_FILES, "src/value.c");
 
-    cb_assert_file_exists(
-        cb_bake_and_run("exe")
-    );
+    path = cb_bake("exe");
+
+    cb_assert_file_exists(path);
+    
+    cb_assert_run(path);
 
     cb_destroy();
 

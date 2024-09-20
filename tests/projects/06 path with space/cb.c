@@ -6,6 +6,8 @@
 
 int main()
 {
+    const char* path = NULL;
+
     cb_init();
 
     /* Static library */
@@ -15,9 +17,9 @@ int main()
 
         cb_add(cb_FILES, "s r c/f o o.c");
 
-        cb_assert_file_exists(
-            cb_bake("f o o")
-        );
+        path = cb_bake("f o o");
+
+        cb_assert_file_exists(path);
     }
 
     /* Shared library */
@@ -29,9 +31,9 @@ int main()
 
         cb_add(cb_DEFINES, "BAR_LIB_EXPORT");
 
-        cb_assert_file_exists(
-            cb_bake("b a r")
-        );
+        path = cb_bake("b a r");
+
+        cb_assert_file_exists(path);
     }
 
     /* exe */
@@ -44,9 +46,11 @@ int main()
         cb_add(cb_LINK_PROJECT, "f o o");
         cb_add(cb_LINK_PROJECT, "b a r");
 
-        cb_assert_file_exists(
-            cb_bake_and_run("e x e")
-        );
+        path = cb_bake("e x e");
+
+        cb_assert_file_exists(path);
+
+        cb_assert_run(path);
     }
 
     cb_destroy();

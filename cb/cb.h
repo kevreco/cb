@@ -141,22 +141,19 @@ CB_API const char* cb_bake(const char* project_name);
 /* Same as cb_bake. Take an explicit toolchain instead of using the default one. */
 CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name);
 
-/* Same as cb_bake, additionaly run the resulting executable (if applicable).
-   Returns NULL if project could not be baked or if the executable could not be run.
+/* Run command.
+   Returns exit code. Returns -1 if command could not be executed.
 */
-CB_API const char* cb_bake_and_run(const char* project_name);
-
-/* Same as cb_bake_with, additionaly run the resulting executable (if applicable).
-   Returns NULL if project could not be baked or if the executable could not be run.
-*/
-CB_API const char* cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name);
+CB_API int cb_run(const char* cmd);
 
 CB_API cb_toolchain cb_toolchain_default();
 
-CB_API cb_bool cb_subprocess(const char* cmd);
-CB_API cb_bool cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory);
+/* Run command and returns exit code. */
+CB_API int cb_subprocess(const char* cmd);
+/* Same as cb_subprocess but provide a starting directory. */
+CB_API int cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory);
 
-/* commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
+/* Commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
 extern const char* cb_BINARY_TYPE;       /* Exe, shared_lib or static_lib. */
@@ -1922,56 +1919,10 @@ cb_get_output_directory(cb_project_t* project, const cb_toolchain* tc)
 	}
 }
 
-CB_API const char*
-cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
+CB_API int
+cb_run(const char* cmd)
 {
-	const char* result = NULL;
-	cb_project_t* project = NULL;
-	const char* output_dir = NULL;
-	const char* result_with_quotes = NULL;
-
-	result = cb_bake_with(toolchain, project_name);
-	if (!result)
-	{
-		return NULL;
-	}
-	
-	project = cb_find_project_by_name_str(project_name);
-
-	if (!project)
-	{
-		return NULL;
-	}
-
-	if (!cb_property_equals(project, cb_BINARY_TYPE, cb_EXE))
-	{
-		cb_log_error("Cannot use 'cb_bake_and_run_with' for non-executable project");
-		return NULL;
-	}
-
-	if (!cb_path_exists(result))
-	{
-		cb_log_error("No binary was created from project '%s'", project_name);
-		return NULL;
-	}
-
-	output_dir = cb_get_output_directory(project, &toolchain);
-	/* Place executable path in quotes in case it contains spaces. */
-	result_with_quotes = cb_tmp_sprintf("\"%s\"", result);
-
-	/* Run executable */
-	if (!cb_subprocess_with_starting_directory(result_with_quotes, output_dir))
-	{
-		return NULL;
-	}
-
-	return result;
-}
-
-CB_API const char*
-cb_bake_and_run(const char* project_name)
-{
-	return cb_bake_and_run_with(cb_toolchain_default(), project_name);
+	return cb_subprocess(cmd);
 }
 
 #if _WIN32
@@ -1980,7 +1931,7 @@ cb_bake_and_run(const char* project_name)
 
 /* @TODO return exit code and create a 'cb_run()' instead of 'cb_bake_and_run()' */
 /* the char* cmd should be writtable */
-CB_API cb_bool
+CB_API int
 cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
 {
 	DWORD exit_status = -1;
@@ -2024,7 +1975,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 	{
 		cb_log_error("CreateProcessW failed: %d", GetLastError());
 		/* No need to close handles since the process creation failed */
-		return cb_false;
+		return -1;
 	}
 
 	DWORD result = WaitForSingleObject(
@@ -2056,7 +2007,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
 	
-	return exit_status == 0;
+	return exit_status;
 }
 #else
 
@@ -2169,7 +2120,7 @@ cb_fork_process(char* args[], const char* starting_directory)
 	return pid;
 }
 
-CB_API cb_bool
+CB_API int
 cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
 {
 	cb_darrT(const char*) args;
@@ -2242,10 +2193,10 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 
 #endif
 
-CB_API cb_bool
-cb_subprocess(const char* str)
+CB_API int
+cb_subprocess(const char* path)
 {
-	return cb_subprocess_with_starting_directory(str, NULL);
+	return cb_subprocess_with_starting_directory(path, NULL);
 }
 
 #ifdef _WIN32
@@ -2462,7 +2413,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* execute cl.exe */
-	if (!cb_subprocess_with_starting_directory(str.data, output_dir))
+	if (cb_subprocess_with_starting_directory(str.data, output_dir) != 0)
 	{
 		/* @FIXME: Release all allocated objects here. */
 		return NULL;
@@ -2472,7 +2423,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	{
 		/* lib.exe /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
 		tmp = cb_tmp_sprintf("lib.exe /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
-		if (!cb_subprocess_with_starting_directory(tmp, output_dir))
+		if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
 		{
 			/* @FIXME: Release all allocated objects here. */
 			cb_log_error("Could not execute command to build static library\n");
@@ -2718,7 +2669,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* Example: gcc <includes> -c  <c source files> */
-	if (!cb_subprocess_with_starting_directory(str.data, output_dir))
+	if (cb_subprocess_with_starting_directory(str.data, output_dir) != 0)
 	{
 		/* @FIXME: Release all allocated objects here. */
 		return NULL;
@@ -2731,7 +2682,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			/* Create libXXX.a in the output directory */
 			/* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
 			tmp = cb_tmp_sprintf("ar -crs \"%s\" %s ", artefact, str_obj.data);
-			if (!cb_subprocess_with_starting_directory(tmp, output_dir))
+			if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
 			{
 				/* @FIXME: Release all allocated objects here. */
 				return NULL;

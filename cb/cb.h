@@ -1978,10 +1978,13 @@ cb_bake_and_run(const char* project_name)
 
 /* #process #subprocess */
 
+/* @TODO return exit code and create a 'cb_run()' instead of 'cb_bake_and_run()' */
 /* the char* cmd should be writtable */
 CB_API cb_bool
 cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
 {
+	DWORD exit_status = -1;
+
 	wchar_t* cmd_w = cb_utf8_to_utf16(cmd);
 	wchar_t* starting_directory_w = NULL;
 
@@ -2020,7 +2023,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 		)
 	{
 		cb_log_error("CreateProcessW failed: %d", GetLastError());
-		/* @FIXME cleanup objects */
+		/* No need to close handles since the process creation failed */
 		return cb_false;
 	}
 
@@ -2029,22 +2032,25 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 					  INFINITE     /* DWORD  dwMilliseconds */
 	);
 
-	if (result == WAIT_FAILED) {
+	if (result != WAIT_FAILED)
+	{
+		if (GetExitCodeProcess(pi.hProcess, &exit_status))
+		{
+			if (exit_status != 0)
+			{
+				cb_log_error("Command exited with exit code %lu", exit_status);
+			}
+		}
+		else
+		{
+			cb_log_error("Could not get process exit code: %lu", GetLastError());
+		}
+	}
+	else
+	{
 		cb_log_error("Could not wait on child process: %lu", GetLastError());
-		/* Close process and thread handles. */
-		CloseHandle(pi.hProcess);
-		CloseHandle(pi.hThread);
-		return cb_false;
 	}
 
-	DWORD exit_status = 0;
-	if (!GetExitCodeProcess(pi.hProcess, &exit_status)) {
-		cb_log_error("Could not get process exit code: %lu", GetLastError());
-	}
-
-	if (exit_status != 0) {
-		cb_log_error("Command exited with exit code %lu", exit_status);
-	}
 
 	/* Close process and thread handles. */
 	CloseHandle(pi.hProcess);

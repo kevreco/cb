@@ -2075,7 +2075,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 	return exit_status == 0;
 }
 #else
-	
+
 
 /* space or tab */
 CB_INTERNAL cb_bool cb_is_space(char c) { return c == ' ' || c == '\t'; }
@@ -2186,24 +2186,18 @@ cb_fork_process(char* args[], const char* starting_directory)
 }
 
 CB_API cb_bool
-cb_subprocess_with_starting_directory(const char* str, const char* starting_directory)
+cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
 {
-	cb_dstr cmd;
+	cb_darrT(const char*) args;
+	cb_strv arg; /* Current argument */
+	const char* cmd_cursor = cmd; /* Current position in the string command */
 	pid_t pid = CB_INVALID_PROCESS;
 	int wstatus = 0; /* pid wait status */
 	int exit_status = 0;
-	cb_darrT(const char*) args;
-	cb_strv arg; /* Current argument */
-	const char* cursor = str; /* Current position in the string command */
-	cb_dstr_init(&cmd);
-	/* cmd will be populated later, but we don't want to reallocate here
-	* to avoid getting invalid pointers.
-	*/
-	/* @FIXME maybe there is better way to create an array of args that does not involve those kind of tricks */
-	cb_dstr_reserve(&cmd, strlen(str) + 1); /* +1 for the last space */
+
 	cb_darrT_init(&args);
 
-	cb_log_debug("Running subprocess '%s'", str);
+	cb_log_debug("Running subprocess '%s'", cmd);
 	if (starting_directory && starting_directory[0])
 	{
 		cb_log_debug("Subprocess started in directory '%s'", starting_directory);
@@ -2213,21 +2207,13 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 	fflush(stdout);
 	fflush(stderr);
 
-	/* @FIXME: we can likely avoid the cmd tmp buffer here since we can allocated temporary strings with cb_tmp_XXX */
-	cursor = str;
-	while ((cursor = cb_get_next_arg(cursor, &arg)) != NULL)
+	/* Split args from the command line and add it to the array. */
+	while ((cmd_cursor = cb_get_next_arg(cmd_cursor, &arg)) != NULL)
 	{
-		const char* arg_ptr = cmd.data + cmd.size;
-		cb_darrT_push_back(&args, arg_ptr);
-
-		/* Add string with trailing space */
-		cb_dstr_append_f(&cmd, "%.*s ", arg.size, arg.data);
-
-		/* Replace previously added space with \0 */
-		cmd.data[cmd.size - 1] = '\0';
+		cb_darrT_push_back(&args, cb_tmp_strv_to_str(arg));
 	}
 
-	/* last value of the args should be a null value, only append if necessary */
+	/* Last value of the args should be a null value, only append if necessary */
 	if (args.darr.size > 0)
 	{
 		cb_darrT_push_back(&args, NULL);
@@ -2237,7 +2223,6 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 	if (pid == CB_INVALID_PROCESS)
 	{
 		cb_darrT_destroy(&args);
-		cb_dstr_destroy(&cmd);
 		return cb_false;
 	}
 
@@ -2246,7 +2231,6 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 		if (waitpid(pid, &wstatus, 0) < 0) {
 			cb_log_error("Could not wait on command (pid %d): '%s'", pid, strerror(errno));
 			cb_darrT_destroy(&args);
-			cb_dstr_destroy(&cmd);
 			return cb_false;
 		}
 
@@ -2255,7 +2239,6 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 			if (exit_status != 0) {
 				cb_log_error("Command exited with exit code '%d'", exit_status);
 				cb_darrT_destroy(&args);
-				cb_dstr_destroy(&cmd);
 				return cb_false;
 			}
 
@@ -2265,13 +2248,11 @@ cb_subprocess_with_starting_directory(const char* str, const char* starting_dire
 		if (WIFSIGNALED(wstatus)) {
 			cb_log_error("Command process was terminated by '%s'", strsignal(WTERMSIG(wstatus)));
 			cb_darrT_destroy(&args);
-			cb_dstr_destroy(&cmd);
 			return cb_false;
 		}
 	}
 	
 	cb_darrT_destroy(&args);
-	cb_dstr_destroy(&cmd);
 	return cb_true;
 }
 

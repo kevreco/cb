@@ -13,7 +13,7 @@ int main()
     cb_project("gui");
     cb_set(cbk_BINARY_TYPE, cbk_exe);
 
-    cb_add_file("src/main.c");
+    cb_add(cbk_FILES, "src/main.c");
 
     /* NOTE: We don't want to use cb_bake_and_run the executable since it displays a windows. */
     cb_assert_file_exists(

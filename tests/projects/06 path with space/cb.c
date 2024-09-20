@@ -13,7 +13,7 @@ int main()
         cb_project("f o o");
         cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 
-        cb_add_file("s r c/f o o.c");
+        cb_add(cbk_FILES, "s r c/f o o.c");
 
         cb_assert_file_exists(
             cb_bake("f o o")
@@ -25,7 +25,7 @@ int main()
         cb_project("b a r");
         cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 
-        cb_add_file("s r c/b a r.c");
+        cb_add(cbk_FILES, "s r c/b a r.c");
 
         cb_add(cbk_DEFINES, "BAR_LIB_EXPORT");
 
@@ -39,7 +39,7 @@ int main()
         cb_project("e x e");
         cb_set(cbk_BINARY_TYPE, cbk_exe);
 
-        cb_add_file("s r c/m a i n.c");
+        cb_add(cbk_FILES, "s r c/m a i n.c");
 
         cb_add(cbk_LINK_PROJECT, "f o o");
         cb_add(cbk_LINK_PROJECT, "b a r");

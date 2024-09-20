@@ -9,8 +9,8 @@ int main()
     cb_project("bar");
     cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 
-    cb_add_file("src/int.c");
-    cb_add_file("src/string.c");	
+    cb_add(cbk_FILES, "src/int.c");
+    cb_add(cbk_FILES, "src/string.c");
 
     cb_assert_file_exists(
         cb_bake("bar")

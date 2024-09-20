@@ -15,7 +15,7 @@ int main()
         cb_project("foo_ぁ");
         cb_set(cbk_BINARY_TYPE, cbk_static_lib);
 
-        cb_add_file("src_ぁ/foo_ぁ.c");
+        cb_add(cbk_FILES, "src_ぁ/foo_ぁ.c");
 
         cb_assert_file_exists(
             cb_bake("foo_ぁ")
@@ -27,7 +27,7 @@ int main()
         cb_project("bar"); /* NOTE: .dlls can only contains ANSI characters. */
         cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
 
-        cb_add_file("src_ぁ/bar_ぁ.c");
+        cb_add(cbk_FILES, "src_ぁ/bar_ぁ.c");
 
         cb_add(cbk_DEFINES, "BAR_LIB_EXPORT");
 
@@ -41,7 +41,7 @@ int main()
         cb_project("exe_ぁ");
         cb_set(cbk_BINARY_TYPE, cbk_exe);
 
-        cb_add_file("src_ぁ/main_ぁ.c");
+        cb_add(cbk_FILES, "src_ぁ/main_ぁ.c");
 
         cb_add(cbk_LINK_PROJECT, "foo_ぁ");
         cb_add(cbk_LINK_PROJECT, "bar");

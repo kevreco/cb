@@ -86,12 +86,13 @@ CB_API cb_project_t* cb_project(const char* name);
 CB_API void cb_add(const char* key, const char* value);
 
 /* Wrapper of cb_set with string formatting */
-CB_API void cb_add_f(const char* key, const char* fmt, ...);
+CB_API void cb_add_f(const char* key, const char* format, ...);
 
+/* @TODO move this to internal API */
 /* Add multiple values for the specific key. */
 CB_API void cb_add_many(const char* key, const char* values[], size_t count);
 
-/* Add multiple string values must end with a null value */
+/* Add multiple string values. The last value must be a null value */
 CB_API void cb_add_many_vnull(const char* key, ...);
 
 /* Add multiple values using var args macro */
@@ -106,21 +107,19 @@ CB_API void cb_add_many_vnull(const char* key, ...);
 CB_API void cb_set(const char* key, const char* value);
 
 /* Wrapper around cb_set with string formatting */
-CB_API void cb_set_f(const char* key, const char* fmt, ...);
+CB_API void cb_set_f(const char* key, const char* format, ...);
 
 /* Remove all values associated with the key. Returns number of removed values */
 CB_API int cb_remove_all(const char* key);
 
 /* Wrapper around cb_remove_all with string formatting */
-CB_API int cb_remove_all_f(const char* key, const char* fmt, ...);
+CB_API int cb_remove_all_f(const char* format, ...);
 
 /* Remove item with the exact key and value. */
 CB_API cb_bool cb_remove_one(const char* key, const char* value);
 
 /* Wrapper around cb_remove_one with string formatting */
-CB_API cb_bool cb_remove_one_f(const char* key, const char* fmt, ...);
-
-CB_API void cb_add_file(const char* filepath);
+CB_API cb_bool cb_remove_one_f(const char* key, const char* format, ...);
 
 /* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain */
 typedef const char* (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
@@ -307,17 +306,12 @@ typedef cb_darr cb_dstr;
 typedef char* cb_darr_it;
 
 /* key/value data used in the map and mmap struct */
-struct cb_kv
-{
+struct cb_kv {
 	cb_id hash; /* hash of the key */
 	cb_strv key; /* key */
-	cb_bool is_dynamic_string;
 	union {
-		int _int;
-		float _float;
 		const void* ptr;
 		cb_strv strv;
-		cb_dstr dstr;
 	} u; /* value */
 };
 
@@ -417,31 +411,40 @@ cb_tmp_reset(void)
 	cb_tmp_size = 0;
 }
 
-CB_INTERNAL char*
-cb_tmp_vsprintf(const char* format, va_list args)
+CB_INTERNAL cb_strv
+cb_tmp_strv_vprintf(const char* format, va_list args)
 {
+	cb_strv sv;
 	va_list args_copy;
-	int n = 0;
-	char* data = NULL;
 
 	va_copy(args_copy, args);
 
-	n = vsnprintf(NULL, 0, format, args);
+	sv.size = vsnprintf(NULL, 0, format, args);
 
-	CB_ASSERT(n >= 0);
+	CB_ASSERT(sv.size >= 0);
 
-	data = cb_tmp_alloc(n + 1);
+	sv.data = cb_tmp_alloc(sv.size + 1);
 
-	vsnprintf(data, n + 1, format, args_copy);
+	vsnprintf((char*)sv.data, sv.size + 1, format, args_copy);
 
-	return data;
+	return sv;
 }
 
-CB_INTERNAL char*
+CB_INTERNAL const char*
+cb_tmp_vsprintf(const char* format, va_list args)
+{
+	cb_strv sv;
+	va_list args_copy;
+	va_copy(args_copy, args);
+	sv = cb_tmp_strv_vprintf(format, args_copy);
+	return sv.data;
+}
+
+CB_INTERNAL const char*
 cb_tmp_sprintf(const char* format, ...)
 {
 	va_list args;
-	char* data = NULL;
+	const char* data = NULL;
 	va_start(args, format);
 	data = cb_tmp_vsprintf(format, args);
 	va_end(args);
@@ -452,9 +455,20 @@ CB_INTERNAL const char*
 cb_tmp_strv_to_str(cb_strv sv)
 {
 	char* data = cb_tmp_alloc(sv.size + 1);
-	memcpy(data, sv.data, sv.size);
+	memcpy(data, sv.data, sv.size + 1);
 	data[sv.size] = '\0';
 	return data;
+}
+
+CB_INTERNAL cb_strv
+cb_tmp_str_to_strv(const char* str)
+{
+	cb_strv sv;
+	sv.size = strlen(str);
+	sv.data = cb_tmp_alloc(sv.size + 1);
+	memcpy((char*)sv.data, str, sv.size + 1);
+	((char*)sv.data)[sv.size] = '\0';
+	return sv;
 }
 
 CB_INTERNAL int
@@ -467,6 +481,14 @@ CB_INTERNAL void
 cb_tmp_restore(int index)
 {
 	cb_tmp_size = index;
+}
+
+/* Check if pointer is contained in the tmp buffer */
+CB_INTERNAL cb_bool
+cb_tmp_contains(const void* ptr)
+{
+	return ptr >= (void*)cb_tmp_buffer
+		&& ptr < (void*)(cb_tmp_buffer + CB_TMP_CAPACITY);
 }
 
 /*-----------------------------------------------------------------------*/
@@ -790,17 +812,6 @@ cb_dstr_assign_f(cb_dstr* s, const char* fmt, ...)
 }
 
 CB_INTERNAL void
-cb_dstr_append_many(cb_dstr* s, const char* strings[], int count)
-{
-	int i;
-
-	for (i = 0; i < count; ++i)
-	{
-		cb_dstr_append_from(s, s->size, strings[i], strlen(strings[i]));
-	}
-}
-
-CB_INTERNAL void
 cb_dstr_append_str(cb_dstr* s, const char* str)
 {
 	cb_dstr_append_from(s, s->size, str, strlen(str));
@@ -861,13 +872,18 @@ cb_kv_init(cb_kv* kv, cb_strv sv)
 }
 
 CB_INTERNAL cb_kv
-cb_kv_make_with_str(cb_strv sv, const char* value)
+cb_kv_make_with_strv(cb_strv sv, cb_strv value)
 {
 	cb_kv kv;
 	cb_kv_init(&kv, sv);
-	kv.is_dynamic_string = 0;
-	kv.u.strv = cb_strv_make_str(value);
+	kv.u.strv = value;
 	return kv;
+}
+
+CB_INTERNAL cb_kv
+cb_kv_make_with_str(cb_strv sv, const char* value)
+{
+	return cb_kv_make_with_strv(sv, cb_strv_make_str(value));
 }
 
 CB_INTERNAL cb_kv
@@ -875,18 +891,7 @@ cb_kv_make_with_ptr(cb_strv sv, const void* ptr)
 {
 	cb_kv kv;
 	cb_kv_init(&kv, sv);
-	kv.is_dynamic_string = 0;
 	kv.u.ptr = ptr;
-	return kv;
-}
-
-CB_INTERNAL cb_kv
-cb_kv_make_with_dstr(cb_strv sv, cb_dstr value)
-{
-	cb_kv kv;
-	cb_kv_init(&kv, sv);
-	kv.is_dynamic_string = 1;
-	kv.u.dstr = value;
 	return kv;
 }
 
@@ -1005,20 +1010,6 @@ cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 	return cb_false;
 }
 
-CB_INTERNAL void
-cb_mmap_remove_one(cb_mmap* m, int index)
-{
-	/* destroy dynamic string if needed */
-	{
-		cb_kv* kv = cb_darrT_ptr(m, index);
-		if (kv->is_dynamic_string)
-		{
-			cb_dstr_destroy(&kv->u.dstr);
-		}
-	}
-	cb_darrT_remove(m, index);
-}
-
 /* Remove all values found in keys, if the value was a dynamic string the dynamic string is destroyed */
 CB_INTERNAL int
 cb_mmap_remove(cb_mmap* m, cb_kv kv)
@@ -1032,7 +1023,7 @@ cb_mmap_remove(cb_mmap* m, cb_kv kv)
 	{
 		while (current_index < count_to_remove)
 		{
-			cb_mmap_remove_one(m, current_index);
+			cb_darrT_remove(m, current_index);
 			current_index += 1;
 		}
 	}
@@ -1706,53 +1697,6 @@ cb_move_file_to_dir(const char* file, const char* directory)
 	return cb_true;
 }
 
-CB_INTERNAL void cb__add(cb_kv kv);
-CB_INTERNAL void cb__set(cb_kv kv);
-CB_INTERNAL int cb__remove_all(cb_kv kv);
-CB_INTERNAL cb_bool cb__remove_one(cb_kv kv);
-
-CB_INTERNAL void
-cb__add(cb_kv kv)
-{
-	cb_project_t* p = cb__current_project();
-	cb_mmap_insert(&p->mmap, kv);
-}
-
-CB_INTERNAL void
-cb__set(cb_kv kv)
-{
-	/* @FIXME this can easily be optimized, but we don't care about that right now. */
-	cb__remove_all(kv);
-	cb__add(kv);
-}
-
-CB_INTERNAL cb_bool
-cb__remove_one(cb_kv kv)
-{
-	cb_project_t* p = cb__current_project();
-
-	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
-
-	while (range.begin < range.begin)
-	{
-		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
-		{
-			int index = p->mmap.darr.data - range.begin;
-			cb_mmap_remove_one(&p->mmap, index);
-			return cb_true;
-		}
-		range.begin++;
-	}
-	return cb_false;
-}
-
-CB_INTERNAL int
-cb__remove_all(cb_kv kv)
-{
-	cb_project_t* p = cb__current_project();
-	return cb_mmap_remove(&p->mmap, kv);
-}
-
 CB_API void
 cb_init()
 {
@@ -1789,24 +1733,42 @@ CB_API cb_project_t* cb_project(const char* name)
 }
 
 CB_API void
-cb_add_many(const char* key, const char* strings[], size_t count)
+cb_add_many_core(cb_strv key, cb_strv values[], size_t count)
 {
 	size_t i;
+	cb_strv value = { 0 };
+	/* Check that the ptr is contains in the tmp buffer */
+	CB_ASSERT(cb_tmp_contains(key.data));
 
 	for (i = 0; i < count; ++i)
 	{
-		const char* value = strings[i];
-		cb_project_t* p = cb__current_project();
+		value = values[i];
+		/* Check that the ptr is contains in the tmp buffer */
+		CB_ASSERT(cb_tmp_contains(value.data));
+		
+		cb_mmap_insert(
+			&cb__current_project()->mmap,
+			cb_kv_make_with_strv(key, value));
+	}
+}
 
-		cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
+CB_API void
+cb_add_many(const char* key, const char* values[], size_t count)
+{
+	size_t i;
+	cb_strv value = { 0 };
 
-		cb_mmap_insert(&p->mmap, kv);
+	for (i = 0; i < count; ++i)
+	{
+		value = cb_tmp_str_to_strv(values[i]);
+		cb_add_many_core(cb_tmp_str_to_strv(key), &value, 1);
 	}
 }
 
 CB_API void
 cb_add_many_vnull(const char* key, ...)
 {
+	cb_strv value;
 	va_list args;
 	const char* current = NULL;
 	va_start(args, key);
@@ -1815,7 +1777,8 @@ cb_add_many_vnull(const char* key, ...)
 	CB_ASSERT(current);
 	while (current)
 	{
-		cb_add_many(key, &current, 1);
+		value = cb_tmp_str_to_strv(current);
+		cb_add_many_core(cb_tmp_str_to_strv(key), &value, 1);
 		current = va_arg(args, const char*);
 	}
 	va_end(args);
@@ -1824,20 +1787,19 @@ cb_add_many_vnull(const char* key, ...)
 CB_API void
 cb_add(const char* key, const char* value)
 {
-	cb_add_many(key, &value, 1);
+	cb_strv value_copy = cb_tmp_str_to_strv(value);
+	cb_add_many_core(cb_tmp_str_to_strv(key), &value_copy, 1);
 }
 
 CB_API void
-cb_add_f(const char* key, const char* fmt, ...)
+cb_add_f(const char* key, const char* format, ...)
 {
-	cb_dstr s;
+	cb_strv value;
 	va_list args;
-	va_start(args, fmt);
+	va_start(args, format);
 
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+	value = cb_tmp_strv_vprintf(format, args);
+	cb_add_many_core(cb_tmp_str_to_strv(key), &value, 1);
 
 	va_end(args);
 }
@@ -1851,16 +1813,12 @@ cb_set(const char* key, const char* value)
 }
 
 CB_API void
-cb_set_f(const char* key, const char* fmt, ...)
+cb_set_f(const char* key, const char* format, ...)
 {
-	cb_dstr s;
 	va_list args;
-	va_start(args, fmt);
+	va_start(args, format);
 
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	cb__set(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+	cb_set(key, cb_tmp_vsprintf(format, args));
 
 	va_end(args);
 }
@@ -1869,21 +1827,18 @@ CB_API int
 cb_remove_all(const char* key)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
-	return cb__remove_all(kv);
+	cb_project_t* p = cb__current_project();
+	return cb_mmap_remove(&p->mmap, kv);
 }
 
 CB_API int
-cb_remove_all_f(const char* key, const char* fmt, ...)
+cb_remove_all_f(const char* format, ...)
 {
-	cb_dstr s;
 	va_list args;
-	int count;
-	va_start(args, fmt);
+	int count = 0;
+	va_start(args, format);
 
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	count = cb__remove_all(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+	count = cb_remove_all(cb_tmp_vsprintf(format, args));
 
 	va_end(args);
 	return count;
@@ -1893,21 +1848,30 @@ CB_API cb_bool
 cb_remove_one(const char* key, const char* value)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
-	return cb__remove_one(kv);
+	cb_project_t* p = cb__current_project();
+	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
+
+	while (range.begin < range.begin)
+	{
+		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
+		{
+			int index = p->mmap.darr.data - range.begin;
+			cb_darrT_remove(&p->mmap, index);
+			return cb_true;
+		}
+		range.begin++;
+	}
+	return cb_false;
 }
 
 CB_API cb_bool
-cb_remove_one_f(const char* key, const char* fmt, ...)
+cb_remove_one_f(const char* key, const char* format, ...)
 {
-	cb_dstr s;
 	va_list args;
-	cb_bool was_removed;
-	va_start(args, fmt);
+	cb_bool was_removed = cb_false;
+	va_start(args, format);
 
-	cb_dstr_init(&s);
-	cb_dstr_append_from_fv(&s, s.size, fmt, args);
-
-	was_removed = cb__remove_one(cb_kv_make_with_dstr(cb_strv_make_str(key), s));
+	was_removed = cb_remove_one(key, cb_tmp_vsprintf(format, args));
 
 	va_end(args);
 	return was_removed;
@@ -1916,13 +1880,7 @@ cb_remove_one_f(const char* key, const char* fmt, ...)
 CB_API void
 cb_add_file(const char* file)
 {
-	/* @FIXME: we should not get the absolute path now, this should be computed in the toolchain. */
-	/* Let's say we want to dump all values of a project, we should get the orignal values that were set instead of the absolute paths. */
-	cb_dstr absolute_file;
-	cb_dstr_init(&absolute_file);
-	cb_dstr_assign_f(&absolute_file, "%s", cb_path_get_absolute_file(file));
-
-	cb__add(cb_kv_make_with_dstr(cb_strv_make_str(cbk_FILES), absolute_file));
+	cb_add(cbk_FILES, file);
 }
 
 /* Properties are just (strv) values from the map of a project. */
@@ -2018,6 +1976,7 @@ cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 		return NULL;
 	}
 
+	/* @FIXME: use output_dir = cb_get_output_directory(project, tc); and remove "cb_path_directory_str" */
 	output_dir = cb_tmp_strv_to_str(cb_path_directory_str(result));
 
 	/* Place executable path in quotes in case it contains spaces. */
@@ -2357,6 +2316,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	const char* linked_output_dir; /* to keep track of the .obj generated */
 	const char* path_prefix = NULL;
 	cb_project_t* project = NULL;
+	int tmp_index;
 	project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
@@ -2418,8 +2378,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_dstr_append_strv(&str, current.u.strv);
-			cb_dstr_append_str(&str,  _);
+			cb_dstr_append_f(&str,"%s ", current.u.strv.data);
 		}
 	}
 
@@ -2428,7 +2387,10 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_dstr_append_f(&str, "/I\"%s\" ", current.u.strv.data);
+			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
+			tmp_index = cb_tmp_save();
+			cb_dstr_append_f(&str, "/I\"%s\" ", cb_path_get_absolute_dir(current.u.strv.data));
+			cb_tmp_restore(tmp_index);
 		}
 	}
 	
@@ -2438,7 +2400,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_dstr_append_f(&str, "/D\"%.*s\" ", current.u.strv.size, current.u.strv.data);
+			cb_dstr_append_f(&str, "/D\"%s\" ", current.u.strv.data);
 		}
 	}
 
@@ -2448,7 +2410,12 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_dstr_append_f(&str, "\"%s\" ", current.u.dstr.data);
+			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
+			tmp_index = cb_tmp_save();
+
+			cb_dstr_append_f(&str, "\"%s\" ", cb_path_get_absolute_file(current.u.strv.data));
+
+			cb_tmp_restore(tmp_index);
 
 			basename = cb_path_basename(current.u.strv);
 
@@ -2674,7 +2641,9 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
+			tmp_index = cb_tmp_save();
 			cb_dstr_append_f(&str, "-I\"%s\" ", cb_path_get_absolute_dir(current.u.strv.data));
+			cb_tmp_restore(tmp_index);
 		}
 	}
 
@@ -2711,7 +2680,12 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			cb_dstr_append_f(&str, "\"%s\" ", current.u.dstr.data);
+			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
+			tmp_index = cb_tmp_save();
+			/* add .c files */
+			cb_dstr_append_f(&str, "\"%s\" ", cb_path_get_absolute_file(current.u.strv.data));
+			cb_tmp_restore(tmp_index);
+			
 
 			basename = cb_path_basename(current.u.strv);
 

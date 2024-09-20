@@ -1713,7 +1713,6 @@ cb_init()
 CB_API void
 cb_destroy()
 {
-	/* @TODO remove all projects from current context */
 	cb_context_destroy(&default_ctx);
 	cb_tmp_reset();
 }

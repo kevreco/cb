@@ -11,7 +11,7 @@ int main()
     /* Static library */
     {
         cb_project("foo");
-        cb_set(cb_BINARY_TYPE, cb_static_lib);
+        cb_set(cb_BINARY_TYPE, cb_STATIC_LIBRARY);
 
         cb_add(cb_FILES, "src/foo.c");
 
@@ -23,7 +23,7 @@ int main()
     /* Shared library */
     {
         cb_project("bar");
-        cb_set(cb_BINARY_TYPE, cb_shared_lib);
+        cb_set(cb_BINARY_TYPE, cb_SHARED_LIBRARY);
 
         cb_add(cb_FILES, "src/bar.c");
 
@@ -37,7 +37,7 @@ int main()
     /* exe */
     {
         cb_project("exe");
-        cb_set(cb_BINARY_TYPE, cb_exe);
+        cb_set(cb_BINARY_TYPE, cb_EXE);
 
         cb_add(cb_FILES, "src/main.c");
 

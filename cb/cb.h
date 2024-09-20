@@ -169,9 +169,9 @@ extern const char* cb_LFLAGS;            /* Extra flags to give to the linker. *
 extern const char* cb_OUTPUT_DIR;        /* Ouput directory for the generated files. */
 extern const char* cb_TARGET_NAME;       /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
 /* values */
-extern const char* cb_exe;
-extern const char* cb_shared_lib;
-extern const char* cb_static_lib;
+extern const char* cb_EXE;               /* cb_BINARY_TYPE value */
+extern const char* cb_SHARED_LIBRARY;    /* cb_BINARY_TYPE value */
+extern const char* cb_STATIC_LIBRARY;    /* cb_BINARY_TYPE value */
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -226,9 +226,9 @@ const char* cb_OUTPUT_DIR = "output_dir";
 const char* cb_TARGET_NAME = "target_name";
 const char* cb_WORKING_DIRECTORY = "working_directory";
 /* values */
-const char* cb_exe = "exe";
-const char* cb_shared_lib = "shared_library";
-const char* cb_static_lib = "static_library";
+const char* cb_EXE = "exe";
+const char* cb_SHARED_LIBRARY = "shared_library";
+const char* cb_STATIC_LIBRARY = "static_library";
 
 /* string view */
 struct cb_strv {
@@ -1963,7 +1963,7 @@ cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 		return NULL;
 	}
 
-	if (!cb_property_equals(project, cb_BINARY_TYPE, cb_exe))
+	if (!cb_property_equals(project, cb_BINARY_TYPE, cb_EXE))
 	{
 		cb_log_error("Cannot use 'cb_bake_and_run_with' for non-executable project");
 		return NULL;
@@ -2337,9 +2337,9 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Handle binary type */
 
-	cb_bool is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_exe);
-	cb_bool is_shared_library = cb_property_equals(project, cb_BINARY_TYPE, cb_shared_lib);
-	cb_bool is_static_library = cb_property_equals(project, cb_BINARY_TYPE, cb_static_lib);
+	cb_bool is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_EXE);
+	cb_bool is_shared_library = cb_property_equals(project, cb_BINARY_TYPE, cb_SHARED_LIBRARY);
+	cb_bool is_static_library = cb_property_equals(project, cb_BINARY_TYPE, cb_STATIC_LIBRARY);
 
 	if (!is_exe && !is_shared_library && !is_static_library)
 	{
@@ -2452,15 +2452,15 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 			linked_output_dir = cb_get_output_directory(linked_project, tc);
 
 			/* is shared or static library */
-			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib)
-				|| cb_property_equals(linked_project, cb_BINARY_TYPE, cb_static_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY)
+				|| cb_property_equals(linked_project, cb_BINARY_TYPE, cb_STATIC_LIBRARY))
 			{
 				/* /LIBPATH:"output/dir/" "mlib.lib" */
 				cb_dstr_append_f(&str, "/LIBPATH:\"%s\" \"%.*s.lib\" ", linked_output_dir, linked_project_name.size, linked_project_name.data);
 			}
 
 			/* is shared library */
-			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY))
 			{
 				path_prefix = cb_tmp_sprintf("%s%.*s", linked_output_dir, linked_project_name.size, linked_project_name.data);
 				/* .dll */
@@ -2610,9 +2610,9 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_dstr_append_str(&str, "cc ");
 
 	/* Handle binary type */
-	is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_exe);
-	is_shared_library = cb_property_equals(project, cb_BINARY_TYPE, cb_shared_lib);
-	is_static_library = cb_property_equals(project, cb_BINARY_TYPE, cb_static_lib);
+	is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_EXE);
+	is_shared_library = cb_property_equals(project, cb_BINARY_TYPE, cb_SHARED_LIBRARY);
+	is_static_library = cb_property_equals(project, cb_BINARY_TYPE, cb_STATIC_LIBRARY);
 
 	if (!is_exe && !is_shared_library && !is_static_library)
 	{
@@ -2730,15 +2730,15 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			linked_output_dir = cb_get_output_directory(linked_project, tc);
 
 			/* Is static lib or shared lib */
-			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_static_lib)
-				|| cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_STATIC_LIBRARY)
+				|| cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY))
 			{
 				/* -L "my/path/" -l "my_proj" */ 
 				cb_dstr_append_f(&str, "-L \"%s\" -l \"%.*s\" ", linked_output_dir, linked_project_name.size, linked_project_name.data);
 			}
 
 			/* Is shared library */
-			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY))
 			{
 				/* libmy_project.so*/
 				tmp = cb_tmp_sprintf("%slib%.*s.so", linked_output_dir, linked_project_name.size, linked_project_name.data);

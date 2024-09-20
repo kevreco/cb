@@ -11,7 +11,7 @@ int main()
     /* Static library */
     {
         cb_project("f o o");
-        cb_set(cb_BINARY_TYPE, cb_static_lib);
+        cb_set(cb_BINARY_TYPE, cb_STATIC_LIBRARY);
 
         cb_add(cb_FILES, "s r c/f o o.c");
 
@@ -23,7 +23,7 @@ int main()
     /* Shared library */
     {
         cb_project("b a r");
-        cb_set(cb_BINARY_TYPE, cb_shared_lib);
+        cb_set(cb_BINARY_TYPE, cb_SHARED_LIBRARY);
 
         cb_add(cb_FILES, "s r c/b a r.c");
 
@@ -37,7 +37,7 @@ int main()
     /* exe */
     {
         cb_project("e x e");
-        cb_set(cb_BINARY_TYPE, cb_exe);
+        cb_set(cb_BINARY_TYPE, cb_EXE);
 
         cb_add(cb_FILES, "s r c/m a i n.c");
 

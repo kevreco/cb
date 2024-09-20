@@ -11,7 +11,7 @@ int main()
     cb_init();
 
     cb_project("gui");
-    cb_set(cb_BINARY_TYPE, cb_exe);
+    cb_set(cb_BINARY_TYPE, cb_EXE);
 
     cb_add(cb_FILES, "src/main.c");
 

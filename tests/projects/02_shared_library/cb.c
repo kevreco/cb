@@ -7,7 +7,7 @@ int main()
     cb_init();
 
     cb_project("bar");
-    cb_set(cb_BINARY_TYPE, cb_shared_lib);
+    cb_set(cb_BINARY_TYPE, cb_SHARED_LIBRARY);
 
     cb_add(cb_FILES, "src/int.c");
     cb_add(cb_FILES, "src/string.c");

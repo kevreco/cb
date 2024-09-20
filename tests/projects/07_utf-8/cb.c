@@ -13,7 +13,7 @@ int main()
     /* Static library */
     {
         cb_project("foo_ぁ");
-        cb_set(cb_BINARY_TYPE, cb_static_lib);
+        cb_set(cb_BINARY_TYPE, cb_STATIC_LIBRARY);
 
         cb_add(cb_FILES, "src_ぁ/foo_ぁ.c");
 
@@ -25,7 +25,7 @@ int main()
     /* Shared library */
     {
         cb_project("bar"); /* NOTE: .dlls can only contains ANSI characters. */
-        cb_set(cb_BINARY_TYPE, cb_shared_lib);
+        cb_set(cb_BINARY_TYPE, cb_SHARED_LIBRARY);
 
         cb_add(cb_FILES, "src_ぁ/bar_ぁ.c");
 
@@ -39,7 +39,7 @@ int main()
     /* exe */
     {
         cb_project("exe_ぁ");
-        cb_set(cb_BINARY_TYPE, cb_exe);
+        cb_set(cb_BINARY_TYPE, cb_EXE);
 
         cb_add(cb_FILES, "src_ぁ/main_ぁ.c");
 

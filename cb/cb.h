@@ -1216,25 +1216,6 @@ cb_rfind2(cb_strv s, char c1, char c2)
 	return end < begin ? CB_NPOS : (end - begin);
 }
 
-/* Get parent directory from a path */
-CB_INTERNAL cb_strv
-cb_path_directory(cb_strv path)
-{
-	int pos = cb_rfind2(path, '/', '\\');
-	if (pos != CB_NPOS && pos > 0) {
-		return cb_strv_make(path.data
-			, pos && cb_is_directory_separator(path.data[pos -1]) ? pos  : pos + 1 /* Return the result with the trailing slash if there is one */
-		);
-	}
-	return path;
-}
-
-CB_INTERNAL cb_strv
-cb_path_directory_str(const char* str)
-{
-	return cb_path_directory(cb_strv_make_str(str));
-}
-
 CB_INTERNAL cb_strv
 cb_path_filename(cb_strv path)
 {
@@ -1974,9 +1955,7 @@ cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 		return NULL;
 	}
 
-	/* @FIXME: use output_dir = cb_get_output_directory(project, tc); and remove "cb_path_directory_str" */
-	output_dir = cb_tmp_strv_to_str(cb_path_directory_str(result));
-
+	output_dir = cb_get_output_directory(project, &toolchain);
 	/* Place executable path in quotes in case it contains spaces. */
 	result_with_quotes = cb_tmp_sprintf("\"%s\"", result);
 

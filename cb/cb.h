@@ -128,7 +128,7 @@ struct cb_toolchain {
 	cb_toolchain_bake_t bake;
 	/* Name of the toolchain, mostly for debugging purpose */
 	const char* name;
-	/* Name of the default directory, @FIXME we might be able to get rid of this. */
+	/* Name of the default directory. */
 	const char* default_directory_base;
 };
 

@@ -339,7 +339,6 @@ struct cb_project_t {
 struct cb_context {
 	cb_mmap projects;
 	cb_project_t* current_project;
-	cb_darr string_pool; /* to allocate user strings, allow easy allocation of concatenated strings with cb_str */
 };
 
 static cb_context default_ctx;

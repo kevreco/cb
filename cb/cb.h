@@ -159,19 +159,19 @@ CB_API cb_bool cb_subprocess_with_starting_directory(const char* cmd, const char
 /* commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
-extern const char* cbk_BINARY_TYPE;       /* Exe, shared_lib or static_lib. */
-extern const char* cbk_CXFLAGS;           /* Extra flags to give to the C/C++ compiler. */
-extern const char* cbk_DEFINES;           /* Define preprocessing symbol. */
-extern const char* cbk_FILES;             /* Files to consume (could be .c, .cpp, etc.). */
-extern const char* cbk_INCLUDE_DIR;       /* Include directories. */
-extern const char* cbk_LINK_PROJECT;      /* Other project to link. */
-extern const char* cbk_LFLAGS;            /* Extra flags to give to the linker. */
-extern const char* cbk_OUTPUT_DIR;        /* Ouput directory for the generated files. */
-extern const char* cbk_TARGET_NAME;       /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
+extern const char* cb_BINARY_TYPE;       /* Exe, shared_lib or static_lib. */
+extern const char* cb_CXFLAGS;           /* Extra flags to give to the C/C++ compiler. */
+extern const char* cb_DEFINES;           /* Define preprocessing symbol. */
+extern const char* cb_FILES;             /* Files to consume (could be .c, .cpp, etc.). */
+extern const char* cb_INCLUDE_DIR;       /* Include directories. */
+extern const char* cb_LINK_PROJECT;      /* Other project to link. */
+extern const char* cb_LFLAGS;            /* Extra flags to give to the linker. */
+extern const char* cb_OUTPUT_DIR;        /* Ouput directory for the generated files. */
+extern const char* cb_TARGET_NAME;       /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
 /* values */
-extern const char* cbk_exe;
-extern const char* cbk_shared_lib;
-extern const char* cbk_static_lib;
+extern const char* cb_exe;
+extern const char* cb_shared_lib;
+extern const char* cb_static_lib;
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -215,20 +215,20 @@ extern const char* cbk_static_lib;
 */
 
 /* keys */
-const char* cbk_BINARY_TYPE = "binary_type";
-const char* cbk_CXFLAGS = "cxflags";
-const char* cbk_DEFINES = "defines";
-const char* cbk_FILES = "files";
-const char* cbk_INCLUDE_DIR = "include_dir";
-const char* cbk_LINK_PROJECT = "link_project";
-const char* cbk_LFLAGS = "lflags";
-const char* cbk_OUTPUT_DIR = "output_dir";
-const char* cbk_TARGET_NAME = "target_name";
-const char* cbk_WORKING_DIRECTORY = "working_directory";
+const char* cb_BINARY_TYPE = "binary_type";
+const char* cb_CXFLAGS = "cxflags";
+const char* cb_DEFINES = "defines";
+const char* cb_FILES = "files";
+const char* cb_INCLUDE_DIR = "include_dir";
+const char* cb_LINK_PROJECT = "link_project";
+const char* cb_LFLAGS = "lflags";
+const char* cb_OUTPUT_DIR = "output_dir";
+const char* cb_TARGET_NAME = "target_name";
+const char* cb_WORKING_DIRECTORY = "working_directory";
 /* values */
-const char* cbk_exe = "exe";
-const char* cbk_shared_lib = "shared_library";
-const char* cbk_static_lib = "static_library";
+const char* cb_exe = "exe";
+const char* cb_shared_lib = "shared_library";
+const char* cb_static_lib = "static_library";
 
 /* string view */
 struct cb_strv {
@@ -1879,7 +1879,7 @@ cb_remove_one_f(const char* key, const char* format, ...)
 CB_API void
 cb_add_file(const char* file)
 {
-	cb_add(cbk_FILES, file);
+	cb_add(cb_FILES, file);
 }
 
 /* Properties are just (strv) values from the map of a project. */
@@ -1931,7 +1931,7 @@ CB_INTERNAL const char*
 cb_get_output_directory(cb_project_t* project, const cb_toolchain* tc)
 {
 	cb_strv out_dir;
-	if (try_get_property_strv(project, cbk_OUTPUT_DIR, &out_dir))
+	if (try_get_property_strv(project, cb_OUTPUT_DIR, &out_dir))
 	{
 		return cb_path_get_absolute_dir(out_dir.data);
 	}
@@ -1963,7 +1963,7 @@ cb_bake_and_run_with(cb_toolchain toolchain, const char* project_name)
 		return NULL;
 	}
 
-	if (!cb_property_equals(project, cbk_BINARY_TYPE, cbk_exe))
+	if (!cb_property_equals(project, cb_BINARY_TYPE, cb_exe))
 	{
 		cb_log_error("Cannot use 'cb_bake_and_run_with' for non-executable project");
 		return NULL;
@@ -2337,9 +2337,9 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Handle binary type */
 
-	cb_bool is_exe = cb_property_equals(project, cbk_BINARY_TYPE, cbk_exe);
-	cb_bool is_shared_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_shared_lib);
-	cb_bool is_static_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_static_lib);
+	cb_bool is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_exe);
+	cb_bool is_shared_library = cb_property_equals(project, cb_BINARY_TYPE, cb_shared_lib);
+	cb_bool is_static_library = cb_property_equals(project, cb_BINARY_TYPE, cb_static_lib);
 
 	if (!is_exe && !is_shared_library && !is_static_library)
 	{
@@ -2374,7 +2374,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append compiler flags */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
+		range = cb_mmap_get_range_str(&project->mmap, cb_CXFLAGS);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_f(&str,"%s ", current.u.strv.data);
@@ -2383,7 +2383,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append include directories */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
+		range = cb_mmap_get_range_str(&project->mmap, cb_INCLUDE_DIR);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
@@ -2395,7 +2395,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	
 	/* Append preprocessor definition */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_DEFINES);
+		range = cb_mmap_get_range_str(&project->mmap, cb_DEFINES);
 		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
@@ -2405,7 +2405,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append files and .obj */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
+		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
 		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
@@ -2423,13 +2423,13 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* For each linked project we add the link information to the cl.exe command */
-	range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
+	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECT);
 	if (range.count > 0)
 	{
 		cb_dstr_append_str(&str, "/link ");
 		/* Add linker flags */
 		{
-			lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
 			while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
 			{
 				cb_dstr_append_strv(&str, current_lflag.u.strv);
@@ -2452,15 +2452,15 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 			linked_output_dir = cb_get_output_directory(linked_project, tc);
 
 			/* is shared or static library */
-			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib)
-				|| cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib)
+				|| cb_property_equals(linked_project, cb_BINARY_TYPE, cb_static_lib))
 			{
 				/* /LIBPATH:"output/dir/" "mlib.lib" */
 				cb_dstr_append_f(&str, "/LIBPATH:\"%s\" \"%.*s.lib\" ", linked_output_dir, linked_project_name.size, linked_project_name.data);
 			}
 
 			/* is shared library */
-			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib))
 			{
 				path_prefix = cb_tmp_sprintf("%s%.*s", linked_output_dir, linked_project_name.size, linked_project_name.data);
 				/* .dll */
@@ -2610,9 +2610,9 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_dstr_append_str(&str, "cc ");
 
 	/* Handle binary type */
-	is_exe = cb_property_equals(project, cbk_BINARY_TYPE, cbk_exe);
-	is_shared_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_shared_lib);
-	is_static_library = cb_property_equals(project, cbk_BINARY_TYPE, cbk_static_lib);
+	is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_exe);
+	is_shared_library = cb_property_equals(project, cb_BINARY_TYPE, cb_shared_lib);
+	is_static_library = cb_property_equals(project, cb_BINARY_TYPE, cb_static_lib);
 
 	if (!is_exe && !is_shared_library && !is_static_library)
 	{
@@ -2627,7 +2627,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append compiler flags */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_CXFLAGS);
+		range = cb_mmap_get_range_str(&project->mmap, cb_CXFLAGS);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_strv(&str, current.u.strv);
@@ -2637,7 +2637,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append include directories */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_INCLUDE_DIR);
+		range = cb_mmap_get_range_str(&project->mmap, cb_INCLUDE_DIR);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			tmp_index = cb_tmp_save();
@@ -2648,7 +2648,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append preprocessor definition */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_DEFINES);
+		range = cb_mmap_get_range_str(&project->mmap, cb_DEFINES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_f(&str, "-D%.*s ", current.u.strv);
@@ -2676,7 +2676,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append .c files and .obj */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cbk_FILES);
+		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
@@ -2700,12 +2700,12 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* For each linked project we add the link information to the gcc command */
-	range = cb_mmap_get_range_str(&project->mmap, cbk_LINK_PROJECT);
+	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECT);
 	if (range.count > 0)
 	{
 		/* Add linker flags */
 		{
-			lflag_range = cb_mmap_get_range_str(&project->mmap, cbk_LFLAGS);
+			lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
 			while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
 			{
 				cb_dstr_append_strv(&str, current_lflag.u.strv);
@@ -2730,15 +2730,15 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			linked_output_dir = cb_get_output_directory(linked_project, tc);
 
 			/* Is static lib or shared lib */
-			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_static_lib)
-				|| cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_static_lib)
+				|| cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib))
 			{
 				/* -L "my/path/" -l "my_proj" */ 
 				cb_dstr_append_f(&str, "-L \"%s\" -l \"%.*s\" ", linked_output_dir, linked_project_name.size, linked_project_name.data);
 			}
 
 			/* Is shared library */
-			if (cb_property_equals(linked_project, cbk_BINARY_TYPE, cbk_shared_lib))
+			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_shared_lib))
 			{
 				/* libmy_project.so*/
 				tmp = cb_tmp_sprintf("%slib%.*s.so", linked_output_dir, linked_project_name.size, linked_project_name.data);

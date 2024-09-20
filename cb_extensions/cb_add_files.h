@@ -35,7 +35,7 @@ cb_add_files(const char* directory, const char* pattern)
 		cb_dstr_init(&result);
 		cb_dstr_assign_str(&result, filepath);
 
-		cb__add(cb_kv_make_with_dstr(cb_strv_make_str(cbk_FILES), result));
+		cb__add(cb_kv_make_with_dstr(cb_strv_make_str(cb_FILES), result));
 	}
 }
 

@@ -11,9 +11,9 @@ int main()
     /* Static library */
     {
         cb_project("foo");
-        cb_set(cbk_BINARY_TYPE, cbk_static_lib);
+        cb_set(cb_BINARY_TYPE, cb_static_lib);
 
-        cb_add(cbk_FILES, "src/foo.c");
+        cb_add(cb_FILES, "src/foo.c");
 
         cb_assert_file_exists(
             cb_bake("foo")
@@ -23,11 +23,11 @@ int main()
     /* Shared library */
     {
         cb_project("bar");
-        cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
+        cb_set(cb_BINARY_TYPE, cb_shared_lib);
 
-        cb_add(cbk_FILES, "src/bar.c");
+        cb_add(cb_FILES, "src/bar.c");
 
-        cb_add(cbk_DEFINES, "BAR_LIB_EXPORT");
+        cb_add(cb_DEFINES, "BAR_LIB_EXPORT");
 
         cb_assert_file_exists(
             cb_bake("bar")
@@ -37,12 +37,12 @@ int main()
     /* exe */
     {
         cb_project("exe");
-        cb_set(cbk_BINARY_TYPE, cbk_exe);
+        cb_set(cb_BINARY_TYPE, cb_exe);
 
-        cb_add(cbk_FILES, "src/main.c");
+        cb_add(cb_FILES, "src/main.c");
 
-        cb_add(cbk_LINK_PROJECT, "foo");
-        cb_add(cbk_LINK_PROJECT, "bar");
+        cb_add(cb_LINK_PROJECT, "foo");
+        cb_add(cb_LINK_PROJECT, "bar");
 
         cb_assert_file_exists(
             cb_bake_and_run("exe")

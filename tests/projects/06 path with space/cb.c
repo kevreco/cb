@@ -11,9 +11,9 @@ int main()
     /* Static library */
     {
         cb_project("f o o");
-        cb_set(cbk_BINARY_TYPE, cbk_static_lib);
+        cb_set(cb_BINARY_TYPE, cb_static_lib);
 
-        cb_add(cbk_FILES, "s r c/f o o.c");
+        cb_add(cb_FILES, "s r c/f o o.c");
 
         cb_assert_file_exists(
             cb_bake("f o o")
@@ -23,11 +23,11 @@ int main()
     /* Shared library */
     {
         cb_project("b a r");
-        cb_set(cbk_BINARY_TYPE, cbk_shared_lib);
+        cb_set(cb_BINARY_TYPE, cb_shared_lib);
 
-        cb_add(cbk_FILES, "s r c/b a r.c");
+        cb_add(cb_FILES, "s r c/b a r.c");
 
-        cb_add(cbk_DEFINES, "BAR_LIB_EXPORT");
+        cb_add(cb_DEFINES, "BAR_LIB_EXPORT");
 
         cb_assert_file_exists(
             cb_bake("b a r")
@@ -37,12 +37,12 @@ int main()
     /* exe */
     {
         cb_project("e x e");
-        cb_set(cbk_BINARY_TYPE, cbk_exe);
+        cb_set(cb_BINARY_TYPE, cb_exe);
 
-        cb_add(cbk_FILES, "s r c/m a i n.c");
+        cb_add(cb_FILES, "s r c/m a i n.c");
 
-        cb_add(cbk_LINK_PROJECT, "f o o");
-        cb_add(cbk_LINK_PROJECT, "b a r");
+        cb_add(cb_LINK_PROJECT, "f o o");
+        cb_add(cb_LINK_PROJECT, "b a r");
 
         cb_assert_file_exists(
             cb_bake_and_run("e x e")

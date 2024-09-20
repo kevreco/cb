@@ -7,10 +7,10 @@ int main()
     cb_init();
 
     cb_project("foo");
-    cb_set(cbk_BINARY_TYPE, cbk_static_lib);
+    cb_set(cb_BINARY_TYPE, cb_static_lib);
 
-    cb_add(cbk_FILES, "src/int.c");
-    cb_add(cbk_FILES, "src/string.c");
+    cb_add(cb_FILES, "src/int.c");
+    cb_add(cb_FILES, "src/string.c");
 
     cb_assert_file_exists(
         cb_bake("foo")

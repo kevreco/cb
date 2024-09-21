@@ -141,7 +141,7 @@ CB_API const char* cb_bake(const char* project_name);
 /* Same as cb_bake. Take an explicit toolchain instead of using the default one. */
 CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name);
 
-/* Run command.
+/* Run executable path. Path is double quoted before being run, in case path contains some space.
    Returns exit code. Returns -1 if command could not be executed.
 */
 CB_API int cb_run(const char* cmd);
@@ -1920,17 +1920,16 @@ cb_get_output_directory(cb_project_t* project, const cb_toolchain* tc)
 }
 
 CB_API int
-cb_run(const char* cmd)
+cb_run(const char* executable_path)
 {
-	return cb_subprocess(cmd);
+	return cb_subprocess(cb_tmp_sprintf("\"%s\"", executable_path));
 }
 
 #if _WIN32
 
 /* #process #subprocess */
 
-/* @TODO return exit code and create a 'cb_run()' instead of 'cb_bake_and_run()' */
-/* the char* cmd should be writtable */
+/* The char* cmd should be writtable */
 CB_API int
 cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
 {
@@ -2128,7 +2127,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 	const char* cmd_cursor = cmd; /* Current position in the string command */
 	pid_t pid = CB_INVALID_PROCESS;
 	int wstatus = 0; /* pid wait status */
-	int exit_status = 0;
+	int exit_status = -1;
 
 	cb_darrT_init(&args);
 
@@ -2158,7 +2157,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 	if (pid == CB_INVALID_PROCESS)
 	{
 		cb_darrT_destroy(&args);
-		return cb_false;
+		return -1;
 	}
 
 	/* wait for process to be done */
@@ -2166,7 +2165,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 		if (waitpid(pid, &wstatus, 0) < 0) {
 			cb_log_error("Could not wait on command (pid %d): '%s'", pid, strerror(errno));
 			cb_darrT_destroy(&args);
-			return cb_false;
+			return -1;
 		}
 
 		if (WIFEXITED(wstatus)) {
@@ -2174,7 +2173,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 			if (exit_status != 0) {
 				cb_log_error("Command exited with exit code '%d'", exit_status);
 				cb_darrT_destroy(&args);
-				return cb_false;
+				return -1;
 			}
 
 			break;
@@ -2183,12 +2182,12 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 		if (WIFSIGNALED(wstatus)) {
 			cb_log_error("Command process was terminated by '%s'", strsignal(WTERMSIG(wstatus)));
 			cb_darrT_destroy(&args);
-			return cb_false;
+			return -1;
 		}
 	}
 	
 	cb_darrT_destroy(&args);
-	return cb_true;
+	return exit_status;
 }
 
 #endif

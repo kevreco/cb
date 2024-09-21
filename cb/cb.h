@@ -65,7 +65,7 @@
 extern "C" {
 #endif
 
-typedef unsigned int cb_id; /* hashed key */
+typedef unsigned int cb_id; /* hashed key, must be unsigned */
 typedef unsigned int cb_bool;
 typedef size_t cb_size;
 
@@ -826,10 +826,10 @@ cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 /* cb_hash */
 /*-----------------------------------------------------------------------*/
 
-CB_INTERNAL unsigned long
+CB_INTERNAL cb_id
 djb2_strv(const char* str, cb_size count)
 {
-	unsigned long hash = 5381;
+	cb_id hash = 5381;
 	cb_size i = 0;
 	while (i < count)
 	{

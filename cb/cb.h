@@ -1137,8 +1137,7 @@ CB_INTERNAL cb_project_t*
 cb_create_project(const char* name)
 {
 	cb_strv name_sv = cb_strv_make_str(name);
-    cb_id id = cb_hash_strv(name_sv);
-	
+
 	cb_project_t* project = (cb_project_t*)CB_MALLOC(sizeof(cb_project_t));
 	CB_ASSERT(project);
 	if (!project) { return NULL; }
@@ -2220,7 +2219,6 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	
 	cb_kv_range range = { 0 };
 	cb_kv_range lflag_range = { 0 };
-	cb_strv tmp_strv = { 0 };
 	cb_kv current = { 0 };       /* Temporary kv to store results. */
 	cb_kv current_lflag = { 0 }; /* Temporary kv to linker flags. */
 	cb_strv basename = { 0 };
@@ -2315,7 +2313,6 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* Append preprocessor definition */
 	{
 		range = cb_mmap_get_range_str(&project->mmap, cb_DEFINES);
-		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			cb_dstr_append_f(&str, "/D\"%s\" ", current.u.strv.data);
@@ -2325,7 +2322,6 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* Append files and .obj */
 	{
 		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
-		current;
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
@@ -2479,7 +2475,6 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	const char* output_dir;        /* Output directory. Contains the directory path of the binary being created. */
 	cb_darrT(const char*) objects; /* Contains the path of all .o objects */
 
-	cb_strv tmp_strv = { 0 };
 	cb_bool is_exe = cb_false;
 	cb_bool is_static_library = cb_false;
 	cb_bool is_shared_library = cb_false;

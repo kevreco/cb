@@ -326,10 +326,8 @@ struct {                \
 typedef cb_rangeT(cb_kv) cb_kv_range;
 
 struct cb_project_t {
-	cb_context* context;
-	cb_id id;
 	cb_strv name;
-
+	/* @FIXME: rename this "props" or "properties". */
 	cb_mmap mmap; /* multi map of strings - when you want to have multiple values per key */
 };
 
@@ -413,17 +411,15 @@ cb_tmp_strv_vprintf(const char* format, va_list args)
 {
 	cb_strv sv;
 	va_list args_copy;
-
+	int n = 0;
 	va_copy(args_copy, args);
 
-	sv.size = vsnprintf(NULL, 0, format, args);
+	n = vsnprintf(NULL, 0, format, args);
 
-	CB_ASSERT(sv.size >= 0);
+	sv.data = cb_tmp_alloc(n + 1);
 
-	sv.data = cb_tmp_alloc(sv.size + 1);
-
-	vsnprintf((char*)sv.data, sv.size + 1, format, args_copy);
-
+	vsnprintf((char*)sv.data, n + 1, format, args_copy);
+	sv.size = n;
 	return sv;
 }
 
@@ -515,7 +511,6 @@ cb_darr_destroy(cb_darr* arr)
 CB_INTERNAL void*
 cb_darr_ptr(const cb_darr* arr, cb_size index, cb_size sizeof_vlaue)
 {
-	CB_ASSERT(index >= 0);
 	CB_ASSERT(
 		index < arr->size /* Within accessible item range */
 		|| index == arr->size /* Also allow getting the item at the end */
@@ -639,12 +634,12 @@ typedef cb_bool(*cb_predicate_t)(const void* left, const void* right);
 CB_INTERNAL cb_size
 cb_lower_bound_predicate(const void* void_ptr, cb_size left, cb_size right, const void* value, cb_size sizeof_value, cb_predicate_t pred)
 {
-	CB_ASSERT(left <= right);
-
 	const char* ptr = (const char*)void_ptr;
 	cb_size count = right - left;
 	cb_size step;
 	cb_size mid; /* index of the found value */
+
+	CB_ASSERT(left <= right);
 
 	while (count > 0) {
 		step = count >> 1; /* count divide by two using bit shift */
@@ -729,11 +724,12 @@ cb_dstr_reserve(cb_dstr* s, cb_size new_string_capacity)
 	char* new_data = NULL;
 
 	CB_ASSERT(new_string_capacity > s->capacity && "You should request more capacity, not less."); /* ideally we should ensure this before this call. */
-	
-	if (new_string_capacity <= s->capacity)
-		return; 
+	if (new_string_capacity <= s->capacity) { return; }
 
 	new_data = (char*)CB_MALLOC(new_mem_capacity * sizeof(char));
+	CB_ASSERT(new_data);
+	if (!new_data) { return; }
+
 	if (s->size)
 	{
 		memcpy(new_data, s->data, (s->size + 1) * sizeof(char)); /* +1 is for null-terminated string char */
@@ -766,7 +762,7 @@ CB_INTERNAL cb_size
 cb_dstr_append_from_fv(cb_dstr* s, cb_size index, const char* fmt, va_list args)
 {
 	va_list args_copy;
-	cb_size add_len = 0;
+	int add_len = 0;
 	va_copy(args_copy, args);
 
 	/* Caluclate necessary len */
@@ -1082,11 +1078,27 @@ cb_context_destroy(cb_context* ctx)
 	cb_context_init(ctx);
 }
 
+CB_INTERNAL cb_context*
+cb_current_context()
+{
+	CB_ASSERT(current_ctx);
+	return current_ctx;
+}
+
+CB_INTERNAL cb_project_t*
+cb_current_project()
+{
+	cb_context* ctx = cb_current_context();
+	CB_ASSERT(ctx->current_project);
+	if (!ctx) { return NULL; }
+	return ctx->current_project;
+}
+
 CB_INTERNAL cb_bool
 cb_try_find_project_by_name(cb_strv sv, cb_project_t** project)
 {
 	void* default_value = NULL;
-	*project = (cb_project_t*)cb_mmap_get_ptr(&current_ctx->projects, sv, default_value);
+	*project = (cb_project_t*)cb_mmap_get_ptr(&cb_current_context()->projects, sv, default_value);
 	return (cb_bool)(*project != NULL);
 }
 
@@ -1107,11 +1119,12 @@ CB_INTERNAL cb_project_t* cb_find_project_by_name_str(const char* name) { return
 CB_INTERNAL cb_bool cb_try_find_project_by_name_str(const char* name, cb_project_t** project) { return cb_try_find_project_by_name(cb_strv_make_str(name), project); }
 
 CB_INTERNAL void
-cb_project_init(cb_project_t* project)
+cb_project_init(cb_project_t* project, cb_strv name)
 {
 	memset(project, 0, sizeof(cb_project_t));
 
 	cb_mmap_init(&project->mmap);
+	project->name = name;
 }
 
 CB_INTERNAL void
@@ -1123,26 +1136,18 @@ cb_project_destroy(cb_project_t* project)
 CB_INTERNAL cb_project_t*
 cb_create_project(const char* name)
 {
-	cb_strv n = cb_strv_make_str(name);
-    cb_id id = cb_hash_strv(n);
+	cb_strv name_sv = cb_strv_make_str(name);
+    cb_id id = cb_hash_strv(name_sv);
 	
 	cb_project_t* project = (cb_project_t*)CB_MALLOC(sizeof(cb_project_t));
-	cb_project_init(project);
-	project->context = current_ctx;
-	project->id = id;
-	project->name = n;
-	
-	cb_mmap_insert_ptr(&current_ctx->projects, n, project);
+	CB_ASSERT(project);
+	if (!project) { return NULL; }
+	/* @FIXME we should make sure that the project name is allocated from the tmp allocator */
+	cb_project_init(project, name_sv);
+
+	cb_mmap_insert_ptr(&cb_current_context()->projects, name_sv, project);
 	
     return project;
-}
-
-CB_INTERNAL cb_project_t*
-cb__current_project()
-{
-	CB_ASSERT(current_ctx);
-	CB_ASSERT(current_ctx->current_project);
-	return current_ctx->current_project;
 }
 
 /* API */
@@ -1193,7 +1198,7 @@ cb_rfind(cb_strv s, char c)
 	{
 		end--;
 	}
-	return end < begin ? CB_NPOS : (end - begin);
+	return end < begin ? CB_NPOS : (cb_size)(end - begin);
 }
 
 CB_INTERNAL cb_size
@@ -1209,7 +1214,7 @@ cb_rfind2(cb_strv s, char c1, char c2)
 	{
 		end--;
 	}
-	return end < begin ? CB_NPOS : (end - begin);
+	return end < begin ? CB_NPOS : (cb_size)(end - begin);
 }
 
 CB_INTERNAL cb_strv
@@ -1703,7 +1708,7 @@ CB_API cb_project_t* cb_project(const char* name)
 		project = cb_create_project(name);
 	}
 
-	current_ctx->current_project = project;
+	cb_current_context()->current_project = project;
 	return project;
 }
 
@@ -1722,7 +1727,7 @@ cb_add_many_core(cb_strv key, cb_strv values[], cb_size count)
 		CB_ASSERT(cb_tmp_contains(value.data));
 		
 		cb_mmap_insert(
-			&cb__current_project()->mmap,
+			&cb_current_project()->mmap,
 			cb_kv_make_with_strv(key, value));
 	}
 }
@@ -1802,7 +1807,7 @@ CB_API cb_size
 cb_remove_all(const char* key)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
-	cb_project_t* p = cb__current_project();
+	cb_project_t* p = cb_current_project();
 	return cb_mmap_remove(&p->mmap, kv);
 }
 
@@ -1823,7 +1828,7 @@ CB_API cb_bool
 cb_remove_one(const char* key, const char* value)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
-	cb_project_t* p = cb__current_project();
+	cb_project_t* p = cb_current_project();
 	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
 
 	while (range.begin < range.begin)

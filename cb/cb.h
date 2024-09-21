@@ -1936,7 +1936,7 @@ cb_run(const char* executable_path)
 CB_API int
 cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
 {
-	DWORD exit_status = -1;
+	DWORD exit_status = (DWORD)-1;
 
 	wchar_t* cmd_w = cb_utf8_to_utf16(cmd);
 	wchar_t* starting_directory_w = NULL;
@@ -2009,7 +2009,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
 	
-	return exit_status;
+	return (int)exit_status;
 }
 #else
 

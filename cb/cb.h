@@ -77,8 +77,8 @@ typedef struct cb_darr cb_darr;
 typedef struct cb_kv cb_kv;
 typedef struct cb_context cb_context;
 
-CB_API void cb_init();
-CB_API void cb_destroy();
+CB_API void cb_init(void);
+CB_API void cb_destroy(void);
 
 /* Set or create current project.  */
 CB_API cb_project_t* cb_project(const char* name); 
@@ -147,7 +147,7 @@ CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name
 */
 CB_API int cb_run(const char* cmd);
 
-CB_API cb_toolchain cb_toolchain_default();
+CB_API cb_toolchain cb_toolchain_default(void);
 
 /* Run command and returns exit code. */
 CB_API int cb_subprocess(const char* cmd);
@@ -465,7 +465,7 @@ cb_tmp_str_to_strv(const char* str)
 }
 
 CB_INTERNAL cb_size
-cb_tmp_save()
+cb_tmp_save(void)
 {
 	return cb_tmp_size;
 }
@@ -711,7 +711,7 @@ CB_INTERNAL cb_bool cb_str_equals(const char* left, const char* right) { return 
 /* cb_dstr - dynamic string */
 /*-----------------------------------------------------------------------*/
 
-CB_INTERNAL const char* cb_empty_string() { return "\0EMPTY_STRING"; }
+CB_INTERNAL const char* cb_empty_string(void) { return "\0EMPTY_STRING"; }
 CB_INTERNAL void cb_dstr_init(cb_dstr* dstr) { cb_darr_init(dstr); dstr->data = (char*)cb_empty_string(); }
 CB_INTERNAL void cb_dstr_destroy(cb_dstr* dstr) { if (dstr->data == cb_empty_string()) { dstr->data = NULL; } cb_darr_destroy(dstr); }
 /* does not free anything, just reset the size to 0 */
@@ -1079,14 +1079,14 @@ cb_context_destroy(cb_context* ctx)
 }
 
 CB_INTERNAL cb_context*
-cb_current_context()
+cb_current_context(void)
 {
 	CB_ASSERT(current_ctx);
 	return current_ctx;
 }
 
 CB_INTERNAL cb_project_t*
-cb_current_project()
+cb_current_project(void)
 {
 	cb_context* ctx = cb_current_context();
 	CB_ASSERT(ctx->current_project);
@@ -1679,7 +1679,7 @@ cb_move_file_to_dir(const char* file, const char* directory)
 }
 
 CB_API void
-cb_init()
+cb_init(void)
 {
 	cb_context_init(&default_ctx);
 	current_ctx = &default_ctx;
@@ -1693,7 +1693,7 @@ cb_init()
 }
 
 CB_API void
-cb_destroy()
+cb_destroy(void)
 {
 	cb_context_destroy(&default_ctx);
 	cb_tmp_reset();
@@ -2441,7 +2441,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 }
 
 CB_API cb_toolchain
-cb_toolchain_msvc()
+cb_toolchain_msvc(void)
 {
 	cb_toolchain tc;
 	tc.bake = cb_toolchain_msvc_bake;
@@ -2712,7 +2712,7 @@ cb_toolchain_gcc()
 #endif /* #else of _WIN32 */
 
 CB_API cb_toolchain
-cb_toolchain_default()
+cb_toolchain_default(void)
 {
 #ifdef _WIN32
 	return cb_toolchain_msvc();

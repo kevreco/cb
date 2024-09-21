@@ -2,7 +2,7 @@
 #define CB_EXTENSIONS /* for cb_assert_xxx */
 #include <cb/cb.h>
 
-int main()
+int main(void)
 {
 
 /* @FIXME Only compile this for windows for now, because the linux version require the X library. */

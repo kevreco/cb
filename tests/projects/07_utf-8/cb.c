@@ -6,7 +6,7 @@
    NOTE: NOTE: .dlls can only contains ANSI characters.
 */
 
-int main()
+int main(void)
 {
     const char* path = NULL;
 

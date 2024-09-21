@@ -4,7 +4,7 @@
 
 /* Create an executable linked against a static library and a shared library. */
 
-int main()
+int main(void)
 {
     const char* path = NULL;
 

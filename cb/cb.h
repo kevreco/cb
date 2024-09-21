@@ -2719,8 +2719,4 @@ cb_toolchain_default(void)
 
 #endif /* CB_IMPLEMENTATION_CPP  */
 
-#ifdef CB_EXTENSIONS
-#include "cb_extensions.h"
-#endif /* CB_EXTENSIONS */
-
 #endif /* CB_IMPLEMENTATION */

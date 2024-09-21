@@ -1,6 +1,6 @@
 #define CB_IMPLEMENTATION
-#define CB_EXTENSIONS /* for cb_assert_xxx */
 #include <cb/cb.h>
+#include <cb_extensions/cb_extensions.h>
 
 /* Create an executable linked against a static library and a shared library. */
 

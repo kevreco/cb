@@ -662,13 +662,6 @@ cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* 
 	return left;
 }
 
-/* @FIXME maybe we can directly create an overload for cb_mmap, not sure we want to use raw array with lower_bound */
-CB_INTERNAL int
-cb_darr_lower_bound_predicate(const cb_darr* arr, const void* value, int sizeof_value, cb_predicate_t less)
-{
-	return cb_lower_bound_predicate(arr->data, 0, arr->size, value, sizeof_value, less);
-}
-
 /*-----------------------------------------------------------------------*/
 /* cb_strv - string view */
 /*-----------------------------------------------------------------------*/
@@ -912,19 +905,24 @@ cb_kv_less(const cb_kv* left, const cb_kv* right)
 CB_INTERNAL void cb_mmap_init(cb_mmap* m) { cb_darrT_init(m); }
 CB_INTERNAL void cb_mmap_destroy(cb_mmap* m) { cb_darrT_destroy(m); }
 
+CB_INTERNAL int
+cb_mmap_lower_bound_predicate(const cb_mmap* m, const cb_kv* value)
+{
+	return cb_lower_bound_predicate(m->base.data, 0, m->base.size, value, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
+}
+
 CB_INTERNAL void
 cb_mmap_insert(cb_mmap* m, cb_kv kv)
 {
-	int index = cb_darr_lower_bound_predicate(&m->base, &kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
+	int index = cb_mmap_lower_bound_predicate(m, &kv);
 
 	cb_darrT_insert(m, index, kv);
 }
 
-/* cb_mmap_find does the same as cb_map_find, we should probably remove cb_map implementation if it's not used anymore */
 CB_INTERNAL int
 cb_mmap_find(const cb_mmap* m, const cb_kv* kv)
 {
-	int index = cb_darr_lower_bound_predicate(&m->base, kv, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
+	int index = cb_mmap_lower_bound_predicate(m, kv);
 
 	if (index == m->base.size || cb_kv_less(kv, cb_darrT_ptr(m, index)))
 	{
@@ -1025,7 +1023,6 @@ cb_mmap_remove(cb_mmap* m, cb_kv kv)
 	}
 	return count_to_remove;
 }
-
 
 CB_INTERNAL cb_bool
 cb_mmap_get_from_kv(cb_mmap* map, const cb_kv* item, cb_kv* result)

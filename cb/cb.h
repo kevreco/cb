@@ -67,6 +67,7 @@ extern "C" {
 
 typedef unsigned int cb_id; /* hashed key */
 typedef unsigned int cb_bool;
+typedef size_t cb_size;
 
 /* All various typedef since c89 does not allow typedef redefinition */
 typedef struct cb_toolchain cb_toolchain;
@@ -90,7 +91,7 @@ CB_API void cb_add_f(const char* key, const char* format, ...);
 
 /* @TODO move this to internal API */
 /* Add multiple values for the specific key. */
-CB_API void cb_add_many(const char* key, const char* values[], size_t count);
+CB_API void cb_add_many(const char* key, const char* values[], cb_size count);
 
 /* Add multiple string values. The last value must be a null value */
 CB_API void cb_add_many_vnull(const char* key, ...);
@@ -110,10 +111,10 @@ CB_API void cb_set(const char* key, const char* value);
 CB_API void cb_set_f(const char* key, const char* format, ...);
 
 /* Remove all values associated with the key. Returns number of removed values */
-CB_API int cb_remove_all(const char* key);
+CB_API cb_size cb_remove_all(const char* key);
 
 /* Wrapper around cb_remove_all with string formatting */
-CB_API int cb_remove_all_f(const char* format, ...);
+CB_API cb_size cb_remove_all_f(const char* format, ...);
 
 /* Remove item with the exact key and value. */
 CB_API cb_bool cb_remove_one(const char* key, const char* value);
@@ -229,7 +230,7 @@ const char* cb_STATIC_LIBRARY = "static_library";
 
 /* string view */
 struct cb_strv {
-	int size;
+	cb_size size;
 	const char* data;
 };
 
@@ -238,20 +239,20 @@ struct cb_strv {
  * because we need to compare them in the same way in cb_kv 
  */
 struct cb_darr {
-	int size;
+	cb_size size;
     char* data;
-	int capacity;
+	cb_size capacity;
 };
 
 /* type safe dynamic array */
-#define cb_darrT(type)    \
-    union {               \
-        cb_darr base;     \
-        struct  {         \
-            int size;     \
-			type* data;   \
-            int capacity; \
-        } darr;           \
+#define cb_darrT(type)        \
+    union {                   \
+        cb_darr base;         \
+        struct  {             \
+            cb_size size;     \
+			type* data;       \
+            cb_size capacity; \
+        } darr;               \
     }
 
 #define cb_darr_push_back(a, value) \
@@ -280,7 +281,7 @@ struct cb_darr {
 
 #define cb_darrT_push_back(a, value) \
     do {  \
-        int last__ = (a)->darr.size; \
+        cb_size last__ = (a)->darr.size; \
         cb_darr_insert_one_space(&(a)->base, last__, sizeof(*(a)->darr.data)); \
 		(a)->darr.data[last__] = value; \
 	} while (0)
@@ -319,7 +320,7 @@ typedef cb_darrT(cb_kv) cb_mmap;
 struct {                \
 	type* begin;        \
 	type* end;          \
-	int count;          \
+	cb_size count;      \
 }
 
 typedef cb_rangeT(cb_kv) cb_kv_range;
@@ -373,11 +374,11 @@ cb_log_important(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_l
 #define CB_TMP_CAPACITY (8 * 1024 * 1024) /* Arbitrary size. Must be big enough. Can be increased if needed. */
 #endif
 
-static CB_THREAD int cb_tmp_size = 0;
+static CB_THREAD cb_size cb_tmp_size = 0;
 static CB_THREAD char cb_tmp_buffer[CB_TMP_CAPACITY] = { 0 };
 
 CB_INTERNAL void*
-cb_tmp_alloc(int size)
+cb_tmp_alloc(cb_size size)
 {
 	void* data = NULL;
 
@@ -394,7 +395,7 @@ cb_tmp_alloc(int size)
 }
 
 CB_INTERNAL void*
-cb_tmp_calloc(int size)
+cb_tmp_calloc(cb_size size)
 {
 	void* data = cb_tmp_alloc(size);
 	memset(data, 0, size);
@@ -467,14 +468,14 @@ cb_tmp_str_to_strv(const char* str)
 	return sv;
 }
 
-CB_INTERNAL int
+CB_INTERNAL cb_size
 cb_tmp_save()
 {
 	return cb_tmp_size;
 }
 
 CB_INTERNAL void
-cb_tmp_restore(int index)
+cb_tmp_restore(cb_size index)
 {
 	cb_tmp_size = index;
 }
@@ -512,7 +513,7 @@ cb_darr_destroy(cb_darr* arr)
 }
 
 CB_INTERNAL void*
-cb_darr_ptr(const cb_darr* arr, int index, int sizeof_vlaue)
+cb_darr_ptr(const cb_darr* arr, cb_size index, cb_size sizeof_vlaue)
 {
 	CB_ASSERT(index >= 0);
 	CB_ASSERT(
@@ -523,17 +524,17 @@ cb_darr_ptr(const cb_darr* arr, int index, int sizeof_vlaue)
 	return arr->data + (index * sizeof_vlaue);
 }
 
-CB_INTERNAL char* cb_darr_end(const cb_darr* arr, int sizeof_value) { return arr->data + (arr->size * sizeof_value); }
+CB_INTERNAL char* cb_darr_end(const cb_darr* arr, cb_size sizeof_value) { return arr->data + (arr->size * sizeof_value); }
 
-CB_INTERNAL int
-cb_darr__get_new_capacity(const cb_darr* arr, int sz)
+CB_INTERNAL cb_size
+cb_darr__get_new_capacity(const cb_darr* arr, cb_size count)
 {
-	int new_capacity = arr->capacity ? (arr->capacity + arr->capacity / 2) : 8;
-	return new_capacity > sz ? new_capacity : sz;
+	cb_size new_capacity = arr->capacity ? (arr->capacity + arr->capacity / 2) : 8;
+	return new_capacity > count ? new_capacity : count;
 }
 
 CB_INTERNAL void
-cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
+cb_darr_reserve(cb_darr* arr, cb_size new_capacity, cb_size sizeof_value)
 {
 	char* new_data = NULL;
 
@@ -542,10 +543,10 @@ cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 		return;
 	}
 
-	new_data = (char*)CB_MALLOC((size_t)new_capacity * sizeof_value);
+	new_data = (char*)CB_MALLOC(new_capacity * sizeof_value);
 	CB_ASSERT(new_data);
 	if (arr->data != NULL) {
-		memcpy(new_data, arr->data, (size_t)arr->size * sizeof_value);
+		memcpy(new_data, arr->data, arr->size * sizeof_value);
 		CB_FREE(arr->data);
 	}
 	arr->data = new_data;
@@ -553,22 +554,21 @@ cb_darr_reserve(cb_darr* arr, int new_capacity, int sizeof_value)
 }
 
 CB_INTERNAL void
-cb_darr__grow_if_needed(cb_darr* arr, int needed, int sizeof_value)
+cb_darr__grow_if_needed(cb_darr* arr, cb_size needed, cb_size sizeof_value)
 {
 	if (needed > arr->capacity)
 		cb_darr_reserve(arr, cb_darr__get_new_capacity(arr, needed), sizeof_value);
 }
 
 CB_INTERNAL void
-cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
+cb_darr_insert_many_space(cb_darr* arr, cb_size index, cb_size count, cb_size sizeof_value)
 {
-	int count_to_move = arr->size - index;
+	cb_size count_to_move;
 
 	CB_ASSERT(arr != NULL);
-	CB_ASSERT(count > 0);
-	CB_ASSERT(index >= 0);
 	CB_ASSERT(index <= arr->size);
 
+	count_to_move = arr->size - index;
 	cb_darr__grow_if_needed(arr, arr->size + count, sizeof_value);
 
 	if (count_to_move > 0)
@@ -583,13 +583,13 @@ cb_darr_insert_many_space(cb_darr* arr, int index, int count, int sizeof_value)
 }
 
 CB_INTERNAL void
-cb_darr_insert_one_space(cb_darr* arr, int index, int sizeof_value)
+cb_darr_insert_one_space(cb_darr* arr, cb_size index, cb_size sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, 1, sizeof_value);
 }
 
 CB_INTERNAL void
-cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int sizeof_value)
+cb_darr_insert_many(cb_darr* arr, cb_size index, const void* value, cb_size count, cb_size sizeof_value)
 {
 	cb_darr_insert_many_space(arr, index, count, sizeof_value);
 
@@ -597,23 +597,21 @@ cb_darr_insert_many(cb_darr* arr, int index, const void* value, int count, int s
 }
 
 CB_INTERNAL void
-cb_darr_insert_one(cb_darr* arr, int index, const void* value, int sizeof_value)
+cb_darr_insert_one(cb_darr* arr, cb_size index, const void* value, cb_size sizeof_value)
 {
 	cb_darr_insert_many(arr, index, value, 1, sizeof_value);
 }
 
 CB_INTERNAL void
-cb_darr_push_back_many(cb_darr* arr, const void* values_ptr, int count, int sizeof_value)
+cb_darr_push_back_many(cb_darr* arr, const void* values_ptr, cb_size count, cb_size sizeof_value)
 {
 	cb_darr_insert_many(arr, arr->size, values_ptr, count, sizeof_value);
 }
 
 CB_INTERNAL void
-cb_darr_remove_many(cb_darr* arr, int index, int count, int sizeof_value)
+cb_darr_remove_many(cb_darr* arr, cb_size index, cb_size count, cb_size sizeof_value)
 {
 	CB_ASSERT(arr);
-	CB_ASSERT(index >= 0);
-	CB_ASSERT(count >= 0);
 	CB_ASSERT(index < arr->size);
 	CB_ASSERT(count <= arr->size);
 	CB_ASSERT(index + count <= arr->size);
@@ -631,20 +629,22 @@ cb_darr_remove_many(cb_darr* arr, int index, int count, int sizeof_value)
 }
 
 CB_INTERNAL void
-cb_darr_remove_one(cb_darr* arr, int index, int sizeof_value)
+cb_darr_remove_one(cb_darr* arr, cb_size index, cb_size sizeof_value)
 {
 	cb_darr_remove_many(arr, index, 1, sizeof_value);
 }
 
 typedef cb_bool(*cb_predicate_t)(const void* left, const void* right);
 
-CB_INTERNAL int
-cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* value, int sizeof_value, cb_predicate_t pred)
+CB_INTERNAL cb_size
+cb_lower_bound_predicate(const void* void_ptr, cb_size left, cb_size right, const void* value, cb_size sizeof_value, cb_predicate_t pred)
 {
+	CB_ASSERT(left <= right);
+
 	const char* ptr = (const char*)void_ptr;
-	int count = right - left;
-	int step;
-	int mid; /* index of the found value */
+	cb_size count = right - left;
+	cb_size step;
+	cb_size mid; /* index of the found value */
 
 	while (count > 0) {
 		step = count >> 1; /* count divide by two using bit shift */
@@ -667,7 +667,7 @@ cb_lower_bound_predicate(const void* void_ptr, int left, int right, const void* 
 /*-----------------------------------------------------------------------*/
 
 CB_INTERNAL cb_strv
-cb_strv_make(const char* data, int size)
+cb_strv_make(const char* data, cb_size size)
 {
 	cb_strv s;
 	s.data = data;
@@ -682,25 +682,27 @@ cb_strv_make_str(const char* str)
 }
 
 CB_INTERNAL int
-cb_lexicagraphical_cmp(const char* left, size_t left_count, const char* right, size_t right_count)
+cb_lexicagraphical_cmp(const char* left, cb_size left_count, const char* right, cb_size right_count)
 {
-	char c1, c2;
-	size_t min_size = left_count < right_count ? left_count : right_count;
+	char left_ch, right_ch;
+	cb_size min_size = left_count < right_count ? left_count : right_count;
 	while (min_size-- > 0)
 	{
-		c1 = (unsigned char)*left++;
-		c2 = (unsigned char)*right++;
-		if (c1 != c2)
-			return c1 < c2 ? 1 : -1;
+		left_ch = *left++;
+		right_ch = *right++;
+		if (left_ch != right_ch)
+			return left_ch < right_ch ? 1 : -1;
 	};
 
-	return left_count - right_count;
+	return left_count == right_count
+		? 0
+		: left_count > right_count ?  1 : -1;
 }
 
-CB_INTERNAL int cb_strv_compare(cb_strv sv, const char* data, int size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
+CB_INTERNAL int cb_strv_compare(cb_strv sv, const char* data, cb_size size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
 CB_INTERNAL int cb_strv_compare_strv(cb_strv sv, cb_strv other) { return cb_strv_compare(sv, other.data, other.size); }
 CB_INTERNAL int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv, str, strlen(str)); }
-CB_INTERNAL cb_bool cb_strv_equals(cb_strv sv, const char* data, int size) { return cb_strv_compare(sv, data, size) == 0; }
+CB_INTERNAL cb_bool cb_strv_equals(cb_strv sv, const char* data, cb_size size) { return cb_strv_compare(sv, data, size) == 0; }
 CB_INTERNAL cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
 CB_INTERNAL cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
 
@@ -721,9 +723,9 @@ CB_INTERNAL void cb_dstr_destroy(cb_dstr* dstr) { if (dstr->data == cb_empty_str
 CB_INTERNAL void cb_dstr_clear(cb_dstr* dstr) { if (dstr->data != cb_empty_string()) { dstr->size = 0; dstr->data[dstr->size] = '\0'; } }
 
 CB_INTERNAL void
-cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
+cb_dstr_reserve(cb_dstr* s, cb_size new_string_capacity)
 {
-	int new_mem_capacity = new_string_capacity + 1;
+	cb_size new_mem_capacity = new_string_capacity + 1;
 	char* new_data = NULL;
 
 	CB_ASSERT(new_string_capacity > s->capacity && "You should request more capacity, not less."); /* ideally we should ensure this before this call. */
@@ -731,10 +733,10 @@ cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
 	if (new_string_capacity <= s->capacity)
 		return; 
 
-	new_data = (char*)CB_MALLOC((size_t)new_mem_capacity * sizeof(char));
+	new_data = (char*)CB_MALLOC(new_mem_capacity * sizeof(char));
 	if (s->size)
 	{
-		memcpy(new_data, s->data, (size_t)(s->size + 1) * sizeof(char)); /* +1 is for null-terminated string char */
+		memcpy(new_data, s->data, (s->size + 1) * sizeof(char)); /* +1 is for null-terminated string char */
 		CB_FREE(s->data);
 	}
 
@@ -743,7 +745,7 @@ cb_dstr_reserve(cb_dstr* s, int new_string_capacity)
 }
 
 CB_INTERNAL void
-cb_dstr__grow_if_needed(cb_dstr* s, int needed)
+cb_dstr__grow_if_needed(cb_dstr* s, cb_size needed)
 {
 	if (needed > s->capacity) { 
 		cb_dstr_reserve(s, cb_darr__get_new_capacity(s, needed));
@@ -751,7 +753,7 @@ cb_dstr__grow_if_needed(cb_dstr* s, int needed)
 }
 
 CB_INTERNAL void
-cb_dstr_append_from(cb_dstr* s, int index, const char* data, int size)
+cb_dstr_append_from(cb_dstr* s, cb_size index, const char* data, cb_size size)
 {
 	cb_dstr__grow_if_needed(s, index + size);
 
@@ -760,11 +762,11 @@ cb_dstr_append_from(cb_dstr* s, int index, const char* data, int size)
 	s->data[s->size] = '\0';
 }
 
-CB_INTERNAL int
-cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_list args)
+CB_INTERNAL cb_size
+cb_dstr_append_from_fv(cb_dstr* s, cb_size index, const char* fmt, va_list args)
 {
 	va_list args_copy;
-	int add_len = 0;
+	cb_size add_len = 0;
 	va_copy(args_copy, args);
 
 	/* Caluclate necessary len */
@@ -780,7 +782,7 @@ cb_dstr_append_from_fv(cb_dstr* s, int index, const char* fmt, va_list args)
 }
 
 CB_INTERNAL void
-cb_dstr_assign(cb_dstr* s, const char* data, int size)
+cb_dstr_assign(cb_dstr* s, const char* data, cb_size size)
 {
 	cb_dstr_append_from(s, 0, data, size);
 }
@@ -812,11 +814,11 @@ cb_dstr_append_strv(cb_dstr* s, cb_strv sv)
 	cb_dstr_append_from(s, s->size, sv.data, sv.size);
 }
 
-CB_INTERNAL int
+CB_INTERNAL cb_size
 cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 {
 	va_list args;
-	int len = 0;
+	cb_size len = 0;
 
 	va_start(args, fmt);
 	len = cb_dstr_append_from_fv(s, s->size, fmt, args);
@@ -829,10 +831,10 @@ cb_dstr_append_f(cb_dstr* s, const char* fmt, ...)
 /*-----------------------------------------------------------------------*/
 
 CB_INTERNAL unsigned long
-djb2_strv(const char* str, int count)
+djb2_strv(const char* str, cb_size count)
 {
 	unsigned long hash = 5381;
-	int i = 0;
+	cb_size i = 0;
 	while (i < count)
 	{
 		hash = ((hash << 5) + hash) + str[i]; /* hash * 33 + c */
@@ -905,7 +907,7 @@ cb_kv_less(const cb_kv* left, const cb_kv* right)
 CB_INTERNAL void cb_mmap_init(cb_mmap* m) { cb_darrT_init(m); }
 CB_INTERNAL void cb_mmap_destroy(cb_mmap* m) { cb_darrT_destroy(m); }
 
-CB_INTERNAL int
+CB_INTERNAL cb_size
 cb_mmap_lower_bound_predicate(const cb_mmap* m, const cb_kv* value)
 {
 	return cb_lower_bound_predicate(m->base.data, 0, m->base.size, value, sizeof(cb_kv), (cb_predicate_t)cb_kv_less);
@@ -914,15 +916,15 @@ cb_mmap_lower_bound_predicate(const cb_mmap* m, const cb_kv* value)
 CB_INTERNAL void
 cb_mmap_insert(cb_mmap* m, cb_kv kv)
 {
-	int index = cb_mmap_lower_bound_predicate(m, &kv);
+	cb_size index = cb_mmap_lower_bound_predicate(m, &kv);
 
 	cb_darrT_insert(m, index, kv);
 }
 
-CB_INTERNAL int
+CB_INTERNAL cb_size
 cb_mmap_find(const cb_mmap* m, const cb_kv* kv)
 {
-	int index = cb_mmap_lower_bound_predicate(m, kv);
+	cb_size index = cb_mmap_lower_bound_predicate(m, kv);
 
 	if (index == m->base.size || cb_kv_less(kv, cb_darrT_ptr(m, index)))
 	{
@@ -936,7 +938,7 @@ CB_INTERNAL cb_bool
 cb_mmap_try_get_first(const cb_mmap* m, cb_strv key, cb_kv* kv)
 {
 	cb_kv key_item = cb_kv_make_with_str(key, "");
-	int index = cb_mmap_find(m, &key_item);
+	cb_size index = cb_mmap_find(m, &key_item);
 
 	if (index != m->darr.size) /* found */
 	{
@@ -954,7 +956,7 @@ cb_mmap_get_range(const cb_mmap* m, cb_strv key)
 
 	cb_kv key_item = cb_kv_make_with_str(key, "");
 
-	int index = cb_mmap_find(m, &key_item);
+	cb_size index = cb_mmap_find(m, &key_item);
 
 	if (index == m->darr.size)
 	{
@@ -1005,13 +1007,13 @@ cb_mmap_range_get_next(cb_kv_range* range, cb_kv* next)
 }
 
 /* Remove all values found in keys, if the value was a dynamic string the dynamic string is destroyed */
-CB_INTERNAL int
+CB_INTERNAL cb_size
 cb_mmap_remove(cb_mmap* m, cb_kv kv)
 {
 	cb_kv_range range = cb_mmap_get_range(m, kv.key);
 
-	int count_to_remove = range.count;
-	int current_index = range.begin - m->darr.data;
+	cb_size count_to_remove = range.count;
+	cb_size current_index = range.begin - m->darr.data;
 
 	if (range.count)
 	{
@@ -1027,7 +1029,7 @@ cb_mmap_remove(cb_mmap* m, cb_kv kv)
 CB_INTERNAL cb_bool
 cb_mmap_get_from_kv(cb_mmap* map, const cb_kv* item, cb_kv* result)
 {
-	int index = cb_mmap_find(map, item);
+	cb_size index = cb_mmap_find(map, item);
 	if (index != map->base.size)
 	{
 		*result = cb_darrT_at(map, index);
@@ -1176,9 +1178,9 @@ cb_utf8_to_utf16(const char* str)
 
 CB_INTERNAL cb_bool cb_is_directory_separator(char c) { return (c == '/' || c == '\\'); }
 
-#define CB_NPOS (-1)
+#define CB_NPOS ((cb_size)-1)
 
-CB_INTERNAL int
+CB_INTERNAL cb_size
 cb_rfind(cb_strv s, char c)
 {
 	const char* begin = NULL;
@@ -1194,7 +1196,7 @@ cb_rfind(cb_strv s, char c)
 	return end < begin ? CB_NPOS : (end - begin);
 }
 
-CB_INTERNAL int
+CB_INTERNAL cb_size
 cb_rfind2(cb_strv s, char c1, char c2)
 {
 	const char* begin = NULL;
@@ -1213,7 +1215,7 @@ cb_rfind2(cb_strv s, char c1, char c2)
 CB_INTERNAL cb_strv
 cb_path_filename(cb_strv path)
 {
-	int pos = cb_rfind2(path, '/', '\\');
+	cb_size pos = cb_rfind2(path, '/', '\\');
 	if (pos != CB_NPOS && pos > 0) {
 		return cb_strv_make(path.data + pos + 1 /* plus one because we don't want the slash char */
 			, path.size - pos);
@@ -1233,7 +1235,7 @@ cb_path_basename(cb_strv s)
 
 	if (!cb_strv_equals_str(filename, ".")
 		&& !cb_strv_equals_str(filename, "..")) {
-		int pos = cb_rfind(filename, '.');
+		cb_size pos = cb_rfind(filename, '.');
 		if (pos != CB_NPOS && pos > 0) {
 			return cb_strv_make(filename.data, pos);
 		}
@@ -1253,11 +1255,11 @@ cb_path_basename_str(const char* str)
 #define cb_str_append_from(dst, src, index, max) cb_str_append_from_core(dst, src, index, max, __FILE__, __LINE__)
 
 /* Returns the number of character writter. Null-terminating char is not counted. */
-CB_INTERNAL int
-cb_str_append_from_core(char* dst, const char* src, int index, int max, const char* file, int line_number)
+CB_INTERNAL cb_size
+cb_str_append_from_core(char* dst, const char* src, cb_size index, cb_size max, const char* file, int line_number)
 {
 	const char* begin = src;
-	int i = index;
+	cb_size i = index;
 
 	do
 	{
@@ -1276,8 +1278,8 @@ cb_str_append_from_core(char* dst, const char* src, int index, int max, const ch
 }
 
 /* return 1 if separator has been added 0 otherwise */
-CB_INTERNAL int
-cb_ensure_trailing_dir_separator(char* path, int path_len)
+CB_INTERNAL cb_size
+cb_ensure_trailing_dir_separator(char* path, cb_size path_len)
 {
 	if (!path || path_len >= CB_MAX_PATH) return cb_false;
 
@@ -1298,7 +1300,7 @@ CB_INTERNAL char*
 cb_path_combine(const char* left, const char* right)
 {
 	char* result = cb_tmp_calloc(CB_MAX_PATH);
-	int n = 0;
+	cb_size n = 0;
 	n += cb_str_append_from(result, left, n, CB_MAX_PATH);
 	n += cb_ensure_trailing_dir_separator(result, strlen(result));
 	n += cb_str_append_from(result, right, n, CB_MAX_PATH);
@@ -1344,13 +1346,13 @@ CB_INTERNAL cb_bool cb__create_directory(const char* path) { return cb_create_di
 CB_INTERNAL cb_bool
 cb_path_is_absolute(cb_strv path)
 {
-	int len = path.size;
+	cb_size len = path.size;
 
 	if (len == 0) return cb_false;
 
 #ifdef _WIN32
-	// Check drive C:
-	int i = 0;
+	/* Check drive C : */
+	cb_size i = 0;
 	if (isalpha(path.data[0]) && path.data[1] == ':')
 	{
 		i = 2;
@@ -1372,7 +1374,7 @@ cb_path_is_absolute(cb_strv path)
 CB_INTERNAL char*
 cb_path_get_absolute_core(const char* path, cb_bool is_directory)
 {
-	int n = 0;
+	cb_size n = 0;
 	char* buffer = (char*)cb_tmp_calloc(FILENAME_MAX);
 	char* cursor = NULL;
 
@@ -1431,7 +1433,7 @@ cb_path_get_absolute_dir(const char* path)
 
 /* create directories recursively */
 CB_INTERNAL void
-cb_create_directories_core(const char* path, int size)
+cb_create_directories_core(const char* path, cb_size size)
 {
 #ifdef _WIN32
 	typedef wchar_t tchar;
@@ -1486,9 +1488,9 @@ cb_create_directories_core(const char* path, int size)
 }
 
 CB_INTERNAL void
-cb_create_directories(const char* path, int size)
+cb_create_directories(const char* path, cb_size size)
 {
-	int index = cb_tmp_save();
+	cb_size index = cb_tmp_save();
 	cb_create_directories_core(path, size);
 	cb_tmp_restore(index);
 }
@@ -1523,10 +1525,10 @@ cb_copy_file(const char* src_path, const char* dest_path)
 	int dst_fd = -1;
 	struct stat src_stat;
 	off_t sendfile_off = 0;
-	int64_t send_result = 0;
-	int64_t total_bytes_copied = 0;
-	int64_t bytes_copied = 0;
-	int64_t bytes_left = 0;
+	cb_size send_result = 0;
+	cb_size total_bytes_copied = 0;
+	cb_size bytes_copied = 0;
+	cb_size bytes_left = 0;
 
 	/* create target directory if it does not exists */
 	cb_create_directories(dest_path, strlen(dest_path));
@@ -1560,12 +1562,12 @@ cb_copy_file(const char* src_path, const char* dest_path)
     while (bytes_left > 0)
     {
 		sendfile_off = total_bytes_copied;
-		send_result = sendfile(dst_fd, src_fd, &sendfile_off, bytes_left);
+		send_result = (cb_size)sendfile(dst_fd, src_fd, &sendfile_off, bytes_left);
 		if(send_result <= 0)
 		{
 			break;
 		}
-		bytes_copied = (int64_t)send_result;
+		bytes_copied = send_result;
 		bytes_left -= bytes_copied;
 		total_bytes_copied += bytes_copied;
     }
@@ -1580,7 +1582,7 @@ CB_INTERNAL cb_bool
 cb_try_copy_file_to_dir(const char* file, const char* directory)
 {
 	cb_bool result = 0;
-	int tmp_index = cb_tmp_save();
+	cb_size tmp_index = cb_tmp_save();
 	cb_strv filename;
 	const char* destination_file = 0;
 
@@ -1612,7 +1614,7 @@ CB_INTERNAL cb_bool
 cb_delete_file(const char* src_path)
 {
 	cb_bool result = 0;
-	int tmp_index = cb_tmp_save();
+	cb_size tmp_index = cb_tmp_save();
 	cb_log_debug("Deleting file '%s'.", src_path);
 #ifdef _WIN32
 	result = DeleteFileW(cb_utf8_to_utf16(src_path));
@@ -1646,7 +1648,7 @@ cb_try_move_file_to_dir(const char* file, const char* directory)
 	cb_strv filename = { 0 };
 	const char* destination_file = NULL;
 
-	int index = cb_tmp_save();
+	cb_size index = cb_tmp_save();
 	if (cb_path_exists(file))
 	{
 		filename = cb_path_filename_str(file);
@@ -1706,9 +1708,9 @@ CB_API cb_project_t* cb_project(const char* name)
 }
 
 CB_API void
-cb_add_many_core(cb_strv key, cb_strv values[], size_t count)
+cb_add_many_core(cb_strv key, cb_strv values[], cb_size count)
 {
-	size_t i;
+	cb_size i;
 	cb_strv value = { 0 };
 	/* Check that the ptr is contains in the tmp buffer */
 	CB_ASSERT(cb_tmp_contains(key.data));
@@ -1726,9 +1728,9 @@ cb_add_many_core(cb_strv key, cb_strv values[], size_t count)
 }
 
 CB_API void
-cb_add_many(const char* key, const char* values[], size_t count)
+cb_add_many(const char* key, const char* values[], cb_size count)
 {
-	size_t i;
+	cb_size i;
 	cb_strv value = { 0 };
 
 	for (i = 0; i < count; ++i)
@@ -1796,7 +1798,7 @@ cb_set_f(const char* key, const char* format, ...)
 	va_end(args);
 }
 
-CB_API int
+CB_API cb_size
 cb_remove_all(const char* key)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), "");
@@ -1804,11 +1806,11 @@ cb_remove_all(const char* key)
 	return cb_mmap_remove(&p->mmap, kv);
 }
 
-CB_API int
+CB_API cb_size
 cb_remove_all_f(const char* format, ...)
 {
 	va_list args;
-	int count = 0;
+	cb_size count = 0;
 	va_start(args, format);
 
 	count = cb_remove_all(cb_tmp_vsprintf(format, args));
@@ -1828,7 +1830,7 @@ cb_remove_one(const char* key, const char* value)
 	{
 		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
 		{
-			int index = p->mmap.darr.data - range.begin;
+			cb_size index = p->mmap.darr.data - range.begin;
 			cb_darrT_remove(&p->mmap, index);
 			return cb_true;
 		}
@@ -2227,7 +2229,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	const char* linked_output_dir; /* to keep track of the .obj generated */
 	const char* path_prefix = NULL;
 	cb_project_t* project = NULL;
-	int tmp_index;
+	cb_size tmp_index;
 	project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
@@ -2490,9 +2492,9 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	cb_project_t* linked_project = NULL;
 	const char* tmp; /* Temp string */
 	const char* current_object = NULL;
-	int i = 0;
+	cb_size i = 0;
 	const char* _ = "  ";        /* Space to separate command arguments */
-	int tmp_index = 0;           /* to save temporary allocation index */
+	cb_size tmp_index = 0;           /* to save temporary allocation index */
 	const char* artefact = NULL; /* Resulting artifact path */
 
 	cb_project_t* project = NULL;

@@ -97,7 +97,7 @@ CB_API void cb_add_many(const char* key, const char* values[], cb_size count);
 CB_API void cb_add_many_vnull(const char* key, ...);
 
 /* Add multiple values using var args macro */
-#if (__STDC_VERSION__ >= 199901L) /* C99 or later */
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 or later */
 #define cb_add_many_v(key, ...) \
 	cb_add_many(key \
     , (const char* []) { __VA_ARGS__ } \

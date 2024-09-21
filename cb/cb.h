@@ -29,6 +29,14 @@
 	#define CB_THREAD __thread
 #endif
 
+/* Suppress some MSVC warnings. */
+#ifdef _MSC_VER
+/* byte padding */
+#pragma warning(disable:4820)
+/* Spectre mitigation */
+#pragma warning(disable:5045)
+#endif
+
 /* in c89 va_copy does not exist */
 #if defined(__GNUC__) || defined(__clang__)
 #ifndef va_copy
@@ -305,8 +313,7 @@ typedef char* cb_darr_it;
 
 /* key/value data used in the map and mmap struct */
 struct cb_kv {
-	cb_id hash; /* hash of the key */
-	int padding0;
+	cb_id hash;  /* hash of the key */
 	cb_strv key; /* key */
 	union {
 		const void* ptr;

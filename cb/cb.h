@@ -306,6 +306,7 @@ typedef char* cb_darr_it;
 /* key/value data used in the map and mmap struct */
 struct cb_kv {
 	cb_id hash; /* hash of the key */
+	int padding0;
 	cb_strv key; /* key */
 	union {
 		const void* ptr;

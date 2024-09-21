@@ -15,7 +15,7 @@ for f in ./tests/**/cb.c; do
   # Go to the cb.c file directory
   cd "$dir"
   # Execute cb.sh on the current cb.c, apprently we need to use the $((XXX)) to assigne a variable in a for loop.
-  $cb_sh --cxflags -std=c89 -pedantic -Werror || { exit_code=$((1)); break; }
+  $cb_sh --pedantic || { exit_code=$((1)); break; }
   # Restore original directory to get the correct absolute path
   cd $root_dir
 done

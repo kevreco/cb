@@ -31,7 +31,7 @@ if not "%1"=="" (
     if "%1"=="clang"             set "cb_clang=1" && set "cb_msvc="
     @REM options                 
     if "%1"=="run"               set "cb_run=1"
-    if "%1"=="pedantic"          set "cb_pedantic=1"
+    if "%1"=="--pedantic"        set "cb_pedantic=1"
     if "%1"=="--file"            set "cb_file=%2" && SHIFT
     if "%1"=="--include-dir"     set "cb_include_dir=%2" && SHIFT
     if "%1"=="--tmp-dir"         set "cb_tmp_dir=%2"  && SHIFT

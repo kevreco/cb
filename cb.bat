@@ -17,26 +17,25 @@ set cb_tmp_dir=.build\\cb\\
 set cb_output=cb.exe
 @REM inlude path to locate the "cb/cb.h" file
 set cb_include_dir=%~dp0
-@REM c or c++ flags
-set "cb_cxflags="
-
+set cb_pedantic=
+set cb_cxflags=
 @REM --------------------------------------------------------------------------------
 @REM Parse Arguments
 @REM --------------------------------------------------------------------------------
 echo [%cb_script%] input args: %*
 :loop
-IF NOT "%1"=="" (
-    IF "%1"=="help"              set "cb_help=1"
+if not "%1"=="" (
+    if "%1"=="help"              set "cb_help=1"
     @REM toolchain               
-    IF "%1"=="msvc"              set "cb_msvc=1"  && set "cb_clang="
-    IF "%1"=="clang"             set "cb_clang=1" && set "cb_msvc="
+    if "%1"=="msvc"              set "cb_msvc=1"  && set "cb_clang="
+    if "%1"=="clang"             set "cb_clang=1" && set "cb_msvc="
     @REM options                 
-    IF "%1"=="run"               set "cb_run=1"
-    IF "%1"=="--file"            set "cb_file=%2" && SHIFT
-    IF "%1"=="--include-dir"     set "cb_include_dir=%2" && SHIFT
-    IF "%1"=="--tmp-dir"         set "cb_tmp_dir=%2"  && SHIFT
-    IF "%1"=="--output"          set "cb_output=%2" && SHIFT
-    IF "%1"=="--cxflags"         set "cb_cxflags=%2" && SHIFT
+    if "%1"=="run"               set "cb_run=1"
+    if "%1"=="pedantic"          set "cb_pedantic=1"
+    if "%1"=="--file"            set "cb_file=%2" && SHIFT
+    if "%1"=="--include-dir"     set "cb_include_dir=%2" && SHIFT
+    if "%1"=="--tmp-dir"         set "cb_tmp_dir=%2"  && SHIFT
+    if "%1"=="--output"          set "cb_output=%2" && SHIFT
 
     SHIFT
     GOTO :loop
@@ -59,7 +58,7 @@ echo    --output  [path]      The output full path of the generated executable
 echo    --tmp-dir [directory] Temporary directory for intermediate objects.
 echo.
 
-Exit /B 1
+exit /B 1
 )
 
 @REM use a loop just to use the %%XXX function
@@ -78,9 +77,11 @@ if not exist %cb_tmp_dir% mkdir %cb_tmp_dir%
 @REM --------------------------------------------------------------------------------
 @REM Compile the builder
 @REM --------------------------------------------------------------------------------
+if "%cb_msvc%"=="1" if "%cb_pedantic%"=="1" set "cb_cxflags=/Wall /WX"
 
 if "%cb_msvc%"=="1" (
-    cl.exe %cxflags% /EHsc /nologo /Zi /utf-8 /I %cb_include_dir% /Fo"%cb_tmp_dir%" /Fd"%cb_tmp_dir%"  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto error
+
+    cl.exe %cb_cxflags% /EHsc /nologo /Zi /utf-8 /I %cb_include_dir% /Fo"%cb_tmp_dir%" /Fd"%cb_tmp_dir%"  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto error
 )
 
 if "%cb_clang%"=="1" (
@@ -109,6 +110,8 @@ set "cb_clang="
 set "cb_msvc="
 set "cb_help="
 set "cb_script="
+set "cb_cxflags="
+set "cb_pedantic="
 
 Exit /B 0
 

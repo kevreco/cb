@@ -534,6 +534,7 @@ cb_darr_reserve(cb_darr* arr, cb_size new_capacity, cb_size sizeof_value)
 {
 	char* new_data = NULL;
 
+	CB_ASSERT(new_capacity > arr->capacity && "You should request more capacity, not less."); /* ideally we should ensure this before this call. */
 	if (new_capacity <= arr->capacity)
 	{
 		return;

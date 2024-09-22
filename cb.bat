@@ -1,5 +1,6 @@
 @echo OFF
 
+set cb_starting_dir==%cd%
 @REM This script name. Get name without extension (%~n0) and append ".bat"
 set "cb_script=%~n0.bat" 
 
@@ -61,9 +62,13 @@ echo.
 exit /B 1
 )
 
-@REM use a loop just to use the %%XXX function
-for %%a in (%cb_file%) do (
-    set "cb_basename=%%~na"
+@REM - Go to the the cb.c parent directory.
+@REM - Extract filename.
+@REM - Extract filename without extension.
+for %%F in (%cb_file%) do (
+    cd %%~dpF"
+    set "cb_filename=%%~nxF"
+    set "cb_basename=%%~nF"
 )
 
 @REM --------------------------------------------------------------------------------
@@ -73,6 +78,7 @@ echo [%cb_script%] Clean up output directory "%cb_tmp_dir%"
 if exist %cb_output% del %cb_output%
 if exist %cb_tmp_dir% rmdir /S /Q %cb_tmp_dir%
 if not exist %cb_tmp_dir% mkdir %cb_tmp_dir%
+if not exist %cb_tmp_dir% echo "Could not create %cb_tmp_dir%" || goto error
 
 @REM --------------------------------------------------------------------------------
 @REM Compile the builder
@@ -80,13 +86,12 @@ if not exist %cb_tmp_dir% mkdir %cb_tmp_dir%
 if "%cb_msvc%"=="1" if "%cb_pedantic%"=="1" set "cb_cxflags=/Wall /WX"
 
 if "%cb_msvc%"=="1" (
-
-    cl.exe %cb_cxflags% /EHsc /nologo /Zi /utf-8 /I %cb_include_dir% /Fo"%cb_tmp_dir%" /Fd"%cb_tmp_dir%"  %cb_file% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto error
+    cl.exe %cb_cxflags% /EHsc /nologo /Zi /utf-8 /I %cb_include_dir% /Fo"%cb_tmp_dir%" /Fd"%cb_tmp_dir%"  %cb_filename% /link /OUT:"%cb_output%" /PDB:"%cb_tmp_dir%" /ILK:"%cb_tmp_dir%/%cb_basename%.ilk" || goto error
 )
 
 if "%cb_clang%"=="1" (
     echo [%cb_script%] ERROR: clang is not supported yet.
-    exit /b 1
+    goto error
 )
  
 if "%cb_run%"=="1" (
@@ -113,8 +118,11 @@ set "cb_script="
 set "cb_cxflags="
 set "cb_pedantic="
 
+cd %cb_starting_dir%
 Exit /B 0
 
 :error
 echo Previous command did not exit with 0
+
+cd %cb_starting_dir%
 exit /b 1

@@ -43,8 +43,8 @@ int main(void)
 
         cb_add(cb_FILES, "s r c/m a i n.c");
 
-        cb_add(cb_LINK_PROJECT, "f o o");
-        cb_add(cb_LINK_PROJECT, "b a r");
+        cb_add(cb_LINK_PROJECTS, "f o o");
+        cb_add(cb_LINK_PROJECTS, "b a r");
 
         path = cb_bake("e x e");
 

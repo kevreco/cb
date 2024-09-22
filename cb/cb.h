@@ -165,22 +165,20 @@ CB_API int cb_subprocess_with_starting_directory(const char* cmd, const char* st
 /* Commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
-extern const char* cb_BINARY_TYPE;       /* Exe, shared_lib or static_lib. */
-extern const char* cb_CXFLAGS;           /* Extra flags to give to the C/C++ compiler. */
-extern const char* cb_DEFINES;           /* Define preprocessing symbol. */
-extern const char* cb_FILES;             /* Files to consume (could be .c, .cpp, etc.). */
-/* @TODO cb_INCLUDE_DIR should be plural */
-extern const char* cb_INCLUDE_DIR;       /* Include directories. */
-/* @TODO cb_LINK_PROJECT should be plural */
-extern const char* cb_LINK_PROJECT;      /* Other project to link. */
-extern const char* cb_LIBRARIES;         /* Libraries to link with. */
-extern const char* cb_LFLAGS;            /* Extra flags to give to the linker. */
-extern const char* cb_OUTPUT_DIR;        /* Ouput directory for the generated files. */
-extern const char* cb_TARGET_NAME;       /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
+extern const char* cb_BINARY_TYPE;         /* Exe, shared_lib or static_lib. */
+extern const char* cb_CXFLAGS;             /* Extra flags to give to the C/C++ compiler. */
+extern const char* cb_DEFINES;             /* Define preprocessing symbol. */
+extern const char* cb_FILES;               /* Files to consume (could be .c, .cpp, etc.). */
+extern const char* cb_INCLUDE_DIRECTORIES; /* Include directories. */
+extern const char* cb_LINK_PROJECTS;       /* Other projects to link. */
+extern const char* cb_LIBRARIES;           /* Libraries to link with. */
+extern const char* cb_LFLAGS;              /* Extra flags to give to the linker. */
+extern const char* cb_OUTPUT_DIR;          /* Ouput directory for the generated files. */
+extern const char* cb_TARGET_NAME;         /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
 /* values */
-extern const char* cb_EXE;               /* cb_BINARY_TYPE value */
-extern const char* cb_SHARED_LIBRARY;    /* cb_BINARY_TYPE value */
-extern const char* cb_STATIC_LIBRARY;    /* cb_BINARY_TYPE value */
+extern const char* cb_EXE;                 /* cb_BINARY_TYPE value */
+extern const char* cb_SHARED_LIBRARY;      /* cb_BINARY_TYPE value */
+extern const char* cb_STATIC_LIBRARY;      /* cb_BINARY_TYPE value */
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -228,8 +226,8 @@ const char* cb_BINARY_TYPE = "binary_type";
 const char* cb_CXFLAGS = "cxflags";
 const char* cb_DEFINES = "defines";
 const char* cb_FILES = "files";
-const char* cb_INCLUDE_DIR = "include_dir";
-const char* cb_LINK_PROJECT = "link_project";
+const char* cb_INCLUDE_DIRECTORIES = "include_directories";
+const char* cb_LINK_PROJECTS = "link_projects";
 const char* cb_LIBRARIES = "libraries";
 const char* cb_LFLAGS = "lflags";
 const char* cb_OUTPUT_DIR = "output_dir";
@@ -2313,7 +2311,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append include directories */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cb_INCLUDE_DIR);
+		range = cb_mmap_get_range_str(&project->mmap, cb_INCLUDE_DIRECTORIES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
@@ -2360,7 +2358,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* For each linked project we add the link information to the cl.exe command */
-	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECT);
+	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECTS);
 	if (range.count > 0)
 	{
 		cb_dstr_append_str(&str, "/link ");
@@ -2573,7 +2571,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 	/* Append include directories */
 	{
-		range = cb_mmap_get_range_str(&project->mmap, cb_INCLUDE_DIR);
+		range = cb_mmap_get_range_str(&project->mmap, cb_INCLUDE_DIRECTORIES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			tmp_index = cb_tmp_save();
@@ -2645,7 +2643,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* For each linked project we add the link information to the gcc command */
-	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECT);
+	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECTS);
 	if (range.count > 0)
 	{
 		/* Add linker flags */

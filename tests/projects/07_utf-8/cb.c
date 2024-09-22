@@ -45,8 +45,8 @@ int main(void)
 
         cb_add(cb_FILES, "src_ぁ/main_ぁ.c");
 
-        cb_add(cb_LINK_PROJECT, "foo_ぁ");
-        cb_add(cb_LINK_PROJECT, "bar");
+        cb_add(cb_LINK_PROJECTS, "foo_ぁ");
+        cb_add(cb_LINK_PROJECTS, "bar");
 
         path = cb_bake("exe_ぁ");
 

@@ -347,6 +347,16 @@ static cb_context default_ctx;
 static cb_context* current_ctx;
 
 /*-----------------------------------------------------------------------*/
+/* utils */
+/*-----------------------------------------------------------------------*/
+
+#define cb_set_and_goto(result, value, goto_label) \
+	do { \
+		result = (value); \
+		goto goto_label; \
+	} while(0)
+
+/*-----------------------------------------------------------------------*/
 /* cb_log */
 /*-----------------------------------------------------------------------*/
 
@@ -1793,7 +1803,7 @@ cb_add_f(const char* key, const char* format, ...)
 CB_API void
 cb_set(const char* key, const char* value)
 {
-	/* @FIXME this can easily be optimized, but we don't care about that right now. */
+	/* @OPT this can easily be optimized, but we don't care about that right now. */
 	cb_remove_all(key);
 	cb_add(key, value);
 }
@@ -2229,7 +2239,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	cb_kv current = { 0 };       /* Temporary kv to store results. */
 	cb_kv current_lflag = { 0 }; /* Temporary kv to linker flags. */
 	cb_strv basename = { 0 };
-	const char* artefact = "";   /* Resulting artefact path */
+	const char* artefact = NULL; /* Resulting artefact path */
 	const char* ext = "";        /* Resulting artefact extension */
 	const char* _ = "  ";        /* Space to separate command arguments. */
 	const char* tmp = "";
@@ -2268,8 +2278,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	if (!is_exe && !is_shared_library && !is_static_library)
 	{
 		cb_log_error("Unknown binary type");
-		/* @FIXME: Release all allocated objects here. */
-		return cb_false;
+		cb_set_and_goto(artefact, NULL, exit);
 	}
 
 	if (is_static_library) {
@@ -2376,8 +2385,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 			linked_project = cb_find_project_by_name(linked_project_name);
 			if (!project)
 			{
-				/* @FIXME: we should return false here */
-				continue;
+				cb_set_and_goto(artefact, NULL, exit);
 			}
 
 			linked_output_dir = cb_get_output_directory(linked_project, tc);
@@ -2398,8 +2406,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				tmp = cb_tmp_sprintf("%s.dll", path_prefix);
 				if (!cb_copy_file_to_dir(tmp, output_dir))
 				{
-					/* @FIXME: Release all allocated objects here. */
-					return NULL;
+					cb_set_and_goto(artefact, NULL, exit);
 				}
 
 				/* .exp */
@@ -2407,8 +2414,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				if (!cb_copy_file_to_dir(tmp, output_dir))
 				{
 					cb_log_warning("Missing .exp. Shared libraries usually need to have some symbol exported with '__declspec(dllexport)'");
-					/* @FIXME: Release all allocated objects here. */
-					return NULL;
+					cb_set_and_goto(artefact, NULL, exit);
 				}
 
 				/* .lib */
@@ -2416,8 +2422,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 				if (!cb_copy_file_to_dir(tmp, output_dir))
 				{
 					cb_log_warning("Missing .lib file. Shared libraries must create a .lib file for other program to be linked with at compile time.");
-					/* @FIXME: Release all allocated objects here. */
-					return NULL;
+					cb_set_and_goto(artefact, NULL, exit);
 				}
 
 				/* Copy .pdb if there is any. */
@@ -2430,8 +2435,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	/* execute cl.exe */
 	if (cb_subprocess_with_starting_directory(str.data, output_dir) != 0)
 	{
-		/* @FIXME: Release all allocated objects here. */
-		return NULL;
+		cb_set_and_goto(artefact, NULL, exit);
 	}
 	
 	if (is_static_library)
@@ -2440,12 +2444,12 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		tmp = cb_tmp_sprintf("lib.exe /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
 		if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
 		{
-			/* @FIXME: Release all allocated objects here. */
 			cb_log_error("Could not execute command to build static library\n");
-			return NULL;
+			cb_set_and_goto(artefact, NULL, exit);
 		}
 	}
 
+exit:
 	cb_dstr_destroy(&str);
 	cb_dstr_destroy(&str_obj);
 
@@ -2547,8 +2551,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	if (!is_exe && !is_shared_library && !is_static_library)
 	{
 		cb_log_error("Unknown binary type");
-		/* @FIXME: Release all allocated objects here. */
-		return cb_false;
+		cb_set_and_goto(artefact, NULL, exit);
 	}
 
 	ext = is_exe ? "" : ext; /* do not provide extension to executables on linux */
@@ -2615,7 +2618,6 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			cb_dstr_append_f(&str, "\"%s\" ", cb_path_get_absolute_file(current.u.strv.data));
 			cb_tmp_restore(tmp_index);
 			
-
 			basename = cb_path_basename(current.u.strv);
 
 			if (is_exe || is_static_library)
@@ -2662,8 +2664,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			linked_project = cb_find_project_by_name(linked_project_name);
 			if (!project)
 			{
-				/* @FIXME: we should return false here */
-				continue;
+				cb_set_and_goto(artefact, NULL, exit);
 			}
 
 			linked_output_dir = cb_get_output_directory(linked_project, tc);
@@ -2684,8 +2685,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 
 				if (!cb_copy_file_to_dir(tmp, output_dir))
 				{
-					/* @FIXME: Release all allocated objects here. */
-					return NULL;
+					cb_set_and_goto(artefact, NULL, exit);
 				}
 			}
 		}
@@ -2694,8 +2694,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	/* Example: gcc <includes> -c  <c source files> */
 	if (cb_subprocess_with_starting_directory(str.data, output_dir) != 0)
 	{
-		/* @FIXME: Release all allocated objects here. */
-		return NULL;
+		cb_set_and_goto(artefact, NULL, exit);
 	}
 
 	if (is_static_library || is_shared_library)
@@ -2707,12 +2706,12 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			tmp = cb_tmp_sprintf("ar -crs \"%s\" %s ", artefact, str_obj.data);
 			if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
 			{
-				/* @FIXME: Release all allocated objects here. */
-				return NULL;
+				cb_set_and_goto(artefact, NULL, exit);
 			}
 		}
 	}
 
+exit:
 	cb_dstr_destroy(&str);
 	cb_dstr_destroy(&str_obj);
 

@@ -97,10 +97,6 @@ CB_API void cb_add(const char* key, const char* value);
 /* Wrapper of cb_set with string formatting */
 CB_API void cb_add_f(const char* key, const char* format, ...);
 
-/* @TODO move this to internal API */
-/* Add multiple values for the specific key. */
-CB_API void cb_add_many(const char* key, const char* values[], cb_size count);
-
 /* Add multiple string values. The last value must be a null value */
 CB_API void cb_add_many_vnull(const char* key, ...);
 
@@ -1742,7 +1738,7 @@ cb_add_many_core(cb_strv key, cb_strv values[], cb_size count)
 	}
 }
 
-CB_API void
+CB_INTERNAL void
 cb_add_many(const char* key, const char* values[], cb_size count)
 {
 	cb_size i;

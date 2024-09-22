@@ -169,8 +169,11 @@ extern const char* cb_BINARY_TYPE;       /* Exe, shared_lib or static_lib. */
 extern const char* cb_CXFLAGS;           /* Extra flags to give to the C/C++ compiler. */
 extern const char* cb_DEFINES;           /* Define preprocessing symbol. */
 extern const char* cb_FILES;             /* Files to consume (could be .c, .cpp, etc.). */
+/* @TODO cb_INCLUDE_DIR should be plural */
 extern const char* cb_INCLUDE_DIR;       /* Include directories. */
+/* @TODO cb_LINK_PROJECT should be plural */
 extern const char* cb_LINK_PROJECT;      /* Other project to link. */
+extern const char* cb_LIBRARIES;         /* Libraries to link with. */
 extern const char* cb_LFLAGS;            /* Extra flags to give to the linker. */
 extern const char* cb_OUTPUT_DIR;        /* Ouput directory for the generated files. */
 extern const char* cb_TARGET_NAME;       /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
@@ -227,6 +230,7 @@ const char* cb_DEFINES = "defines";
 const char* cb_FILES = "files";
 const char* cb_INCLUDE_DIR = "include_dir";
 const char* cb_LINK_PROJECT = "link_project";
+const char* cb_LIBRARIES = "libraries";
 const char* cb_LFLAGS = "lflags";
 const char* cb_OUTPUT_DIR = "output_dir";
 const char* cb_TARGET_NAME = "target_name";
@@ -2346,6 +2350,15 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 		}
 	}
 
+	/* Append libraries */
+	{
+		range = cb_mmap_get_range_str(&project->mmap, cb_LIBRARIES);
+		while (cb_mmap_range_get_next(&range, &current))
+		{
+			cb_dstr_append_f(&str, "\"%s.lib\" ", current.u.strv.data);
+		}
+	}
+
 	/* For each linked project we add the link information to the cl.exe command */
 	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECT);
 	if (range.count > 0)
@@ -2619,6 +2632,15 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 				/* my_object.o */
 				cb_darrT_push_back(&objects, cb_tmp_sprintf("%.*s.o", basename.size, basename.data));
 			}
+		}
+	}
+
+	/* Append libraries */
+	{
+		range = cb_mmap_get_range_str(&project->mmap, cb_LIBRARIES);
+		while (cb_mmap_range_get_next(&range, &current))
+		{
+			cb_dstr_append_f(&str, "-l \"%s\" ", current.u.strv.data);
 		}
 	}
 

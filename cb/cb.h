@@ -965,33 +965,34 @@ cb_mmap_try_get_first(const cb_mmap* m, cb_strv key, cb_kv* kv)
 CB_INTERNAL cb_kv_range
 cb_mmap_get_range(const cb_mmap* m, cb_strv key)
 {
+	cb_size starting_index;
 	cb_kv_range result = { 0, 0, 0 };
 
 	cb_kv key_item = cb_kv_make_with_str(key, "");
 
 	cb_size index = cb_mmap_find(m, &key_item);
 
+	/* No item found */
 	if (index == m->darr.size)
 	{
 		return result;
 	}
+	
+	starting_index = index;
 
 	/* An item has been found */
 
 	result.begin = cb_darrT_ptr(m, index);
 
-	result.count++;
-
 	/* Check for other items */
-	while (index != m->base.size
-		&& cb_kv_comp(cb_darrT_ptr(m, index), &key_item) == 0)
+	do
 	{
 		index += 1;
-
-		result.count++;
-	}
+	} while (index < m->base.size
+		&& cb_kv_comp(cb_darrT_ptr(m, index), &key_item) == 0);
 
 	result.end = cb_darrT_ptr(m, index);
+	result.count = index - starting_index;
 	return result;
 }
 
@@ -1026,16 +1027,14 @@ cb_mmap_remove(cb_mmap* m, cb_kv kv)
 	cb_kv_range range = cb_mmap_get_range(m, kv.key);
 
 	cb_size count_to_remove = range.count;
-	cb_size current_index = range.begin - m->darr.data;
 
-	if (range.count)
+	while (range.begin < range.end)
 	{
-		while (current_index < count_to_remove)
-		{
-			cb_darrT_remove(m, current_index);
-			current_index += 1;
-		}
+		range.end -= 1;
+		/* Remove item from the tail. */
+		cb_darrT_remove(m, range.end - m->darr.data);
 	}
+	
 	return count_to_remove;
 }
 

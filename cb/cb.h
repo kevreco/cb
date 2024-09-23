@@ -1167,8 +1167,8 @@ cb_create_project(const char* name)
 	cb_project_t* project = (cb_project_t*)CB_MALLOC(sizeof(cb_project_t));
 	CB_ASSERT(project);
 	if (!project) { return NULL; }
-	/* @FIXME we should make sure that the project name is allocated from the tmp allocator */
-	cb_project_init(project, name_sv);
+
+	cb_project_init(project, cb_tmp_str_to_strv(name));
 
 	cb_mmap_insert_ptr(&cb_current_context()->projects, name_sv, project);
 	
@@ -1724,7 +1724,8 @@ cb_destroy(void)
 	cb_tmp_reset();
 }
 
-CB_API cb_project_t* cb_project(const char* name)
+CB_API cb_project_t*
+cb_project(const char* name)
 {
 	cb_project_t* project;
 

@@ -963,6 +963,16 @@ cb_mmap_try_get_first(const cb_mmap* m, cb_strv key, cb_kv* kv)
 }
 
 CB_INTERNAL cb_kv_range
+cb_mmap_get_range_all(const cb_mmap* m)
+{
+	cb_kv_range range;
+	range.begin = m->darr.data;
+	range.end = m->darr.data + m->darr.size;
+	range.count = m->darr.size;
+	return range;
+}
+
+CB_INTERNAL cb_kv_range
 cb_mmap_get_range(const cb_mmap* m, cb_strv key)
 {
 	cb_size starting_index;

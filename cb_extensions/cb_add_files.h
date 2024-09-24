@@ -1,43 +1,30 @@
 #ifndef CB_ADD_FILES_H
 #define CB_ADD_FILES_H
 
-/* @TODO document this */
+#include "cb_file_it.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* 
+	Add files from directory that matches the pattern.
+	Pattern can contains stars (*), and is not "slash sensitive".
+	Multiple stars in a row does not have special effect.
+*/
 CB_API void
 cb_add_files(const char* directory, const char* pattern);
 
-/* @TODO document this */
-CB_API cb_bool
-cb_file_it_get_next_glob(cb_file_it* it, const char* pattern);
-
-/* @TODO document this */
-/** wildcard matching, supporting * ** ? [] */
-CB_API cb_bool
-cb_wildmatch(const char* pattern, const char* str); /* forward declaration */
-
 CB_API void
-cb_wildmatch_test();
+cb_add_files_recursive(const char* directory, const char* pattern);
 
-CB_API void
-cb_add_files(const char* directory, const char* pattern)
-{
-	cb_dstr absolute_dir;
-	cb_dstr_init(&absolute_dir);
-	cb_path_get_absolute(directory, &absolute_dir);
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
-	cb_file_it it;
-	cb_file_it_init_recursive(&it, absolute_dir.data);
+#endif /* CB_ADD_FILES_H */
 
-	while (cb_file_it_get_next_glob(&it, pattern))
-	{
-		const char* filepath = cb_file_it_current_file(&it);
-
-		cb_dstr result;
-		cb_dstr_init(&result);
-		cb_dstr_assign_str(&result, filepath);
-
-		cb__add(cb_kv_make_with_dstr(cb_strv_make_str(cb_FILES), result));
-	}
-}
+#ifdef CB_IMPLEMENTATION
 
 /* ================================================================ */
 /* WILDMATCH_H */
@@ -45,8 +32,6 @@ cb_add_files(const char* directory, const char* pattern)
 *  - 'cb_decode_utf8' was named 'decode'
 *  - 'cb_wildmatch' was created from 'match1'
 /* ================================================================ */
-
-static cb_bool cb_wildcad_debug = 0;
 
 /** return nbytes, 0 on end, -1 on error */
 CB_INTERNAL int
@@ -102,11 +87,9 @@ cb_wildmatch(const char* pat, const char* str)
 	int len = 0;
 	p = s = 0;           /* anchor initially not set */
 
-	if (!pat || !str) return cb_false;
+	if (!pat || !str) { return cb_false; }
 
 	for (;;) {
-		if (cb_wildcad_debug)
-			fprintf(stderr, "s=%s\tp=%s\n", str, pat);
 		len = cb_decode_utf8(pat, &pc);
 		if (len < 0)
 			return cb_false;
@@ -133,7 +116,7 @@ cb_wildmatch(const char* pat, const char* str)
 	}
 }
 
-CB_API cb_bool
+CB_INTERNAL cb_bool
 cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
 {
 	while (cb_file_it_get_next(it))
@@ -146,23 +129,31 @@ cb_file_it_get_next_glob(cb_file_it* it, const char* pattern)
 	return cb_false;
 }
 
-
 CB_API void
-cb_wildmatch_test()
+cb_add_files(const char* directory, const char* pattern)
 {
-	CB_ASSERT(cb_wildmatch("a", "a"));
-	CB_ASSERT(!cb_wildmatch("a", "B"));
-	CB_ASSERT(cb_wildmatch("*", "a"));
+	cb_file_it it;
+	cb_file_it_init(&it, directory);
 
-	CB_ASSERT(cb_wildmatch("*.c", "a.c"));
-	CB_ASSERT(cb_wildmatch("\\*.c", "\\a.c"));
-	CB_ASSERT(cb_wildmatch("\\**.c", "\\a.c"));
-	CB_ASSERT(cb_wildmatch("/**.c", "\\a.c"));
-	CB_ASSERT(cb_wildmatch("a/**.c", "a/a.c"));
-	CB_ASSERT(cb_wildmatch("a\\**.c", "a/a.c"));
-	CB_ASSERT(cb_wildmatch("*.c", ".\\src\\tester\\a.c"));
-	CB_ASSERT(cb_wildmatch("*src*.c", ".\\src\\tester\\a.c"));
-	CB_ASSERT(cb_wildmatch("*\\src\\*.c", ".\\src\\tester\\a.c"));
+	while (cb_file_it_get_next_glob(&it, pattern))
+	{
+		const char* filepath = cb_file_it_current_file(&it);
+
+		cb_add(cb_FILES, filepath);
+	}
 }
 
-#endif /* CB_ADD_FILES_H */
+CB_API void
+cb_add_files_recursive(const char* directory, const char* pattern)
+{
+	cb_file_it it;
+	cb_file_it_init_recursive(&it, directory);
+
+	while (cb_file_it_get_next_glob(&it, pattern))
+	{
+		const char* filepath = cb_file_it_current_file(&it);
+
+		cb_add(cb_FILES, filepath);
+	}
+}
+#endif /* CB_IMPLEMENTATION */

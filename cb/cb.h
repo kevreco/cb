@@ -123,8 +123,11 @@ CB_API cb_size cb_remove_all_f(const char* format, ...);
 /* Remove item with the exact key and value. */
 CB_API cb_bool cb_remove_one(const char* key, const char* value);
 
-/* Wrapper around cb_remove_one with string formatting */
+/* Wrapper around cb_remove_one with string formatting. */
 CB_API cb_bool cb_remove_one_f(const char* key, const char* format, ...);
+
+/* Check if key/value already exists in the current project. */
+CB_API cb_bool cb_contains(const char* key, const char* value);
 
 /* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain */
 typedef const char* (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
@@ -478,6 +481,13 @@ cb_tmp_str_to_strv(const char* str)
 	memcpy((char*)sv.data, str, sv.size + 1);
 	((char*)sv.data)[sv.size] = '\0';
 	return sv;
+}
+
+CB_INTERNAL const char*
+cb_tmp_str(const char* str)
+{
+	cb_strv sv = cb_tmp_str_to_strv(str);
+	return sv.data;
 }
 
 CB_INTERNAL cb_size
@@ -1851,13 +1861,33 @@ cb_remove_all_f(const char* format, ...)
 }
 
 CB_API cb_bool
+cb_contains(const char* key, const char* value)
+{
+	cb_project_t* p;
+	cb_kv_range range;
+	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
+	p = cb_current_project();
+	range = cb_mmap_get_range(&p->mmap, kv.key);
+
+	while (range.begin < range.end)
+	{
+		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
+		{
+			return cb_true;
+		}
+		range.begin++;
+	}
+	return cb_false;
+}
+
+CB_API cb_bool
 cb_remove_one(const char* key, const char* value)
 {
 	cb_kv kv = cb_kv_make_with_str(cb_strv_make_str(key), value);
 	cb_project_t* p = cb_current_project();
 	cb_kv_range range = cb_mmap_get_range(&p->mmap, kv.key);
 
-	while (range.begin < range.begin)
+	while (range.begin < range.end)
 	{
 		if (cb_strv_equals_strv((*range.begin).u.strv, kv.u.strv))
 		{

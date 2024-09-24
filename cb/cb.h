@@ -2614,7 +2614,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 		while (cb_mmap_range_get_next(&range, &current))
 		{
 			tmp_index = cb_tmp_save();
-			cb_dstr_append_f(&str, "-I\"%s\" ", cb_path_get_absolute_dir(current.u.strv.data));
+			cb_dstr_append_f(&str, "-I \"%s\" ", cb_path_get_absolute_dir(current.u.strv.data));
 			cb_tmp_restore(tmp_index);
 		}
 	}

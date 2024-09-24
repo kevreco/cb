@@ -5,9 +5,9 @@ cb_starting_dir=$(dirname $PWD)
 cb_gcc=1
 cb_compiler="${CC:-gcc}"
 cb_run=1
-cb_file="$(realpath -- cb.c)"        # Source file name to compile
-cb_output="$(realpath -- ./cb.bin)"  # Executable name
-cb_include_dir="$cb_root/"           # Include directory to locate the cb.h file
+cb_file="$(realpath -- cb.c)"  # Source file name to compile
+cb_output="./cb.bin"           # Executable name
+cb_include_dir="$cb_root/"     # Include directory to locate the cb.h file
 
 while (( "$#" )); do
     if [ "$1" == "clang" ];  then cb_clang=1; cb_compiler="${CC:-clang}"; unset cb_gcc; fi

@@ -2,6 +2,18 @@
 #define CB_FILE_IT_H
 
 #if defined(_WIN32)
+#define CB_INVALID_FILE_HANDLE INVALID_HANDLE_VALUE
+#else
+#define CB_INVALID_FILE_HANDLE NULL
+#endif
+
+#define CB_MAX_DIR_DEPTH 256
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#if defined(_WIN32)
 typedef HANDLE handle_t;
 #else
 typedef DIR* handle_t;
@@ -16,22 +28,35 @@ struct cb_file_it {
 	/* Stack used for recursion. */
 	char current_file[CB_MAX_PATH];
 
-#define CB_MAX_DIR_DEPTH 256
 	/* Stack used for recursion, first item has 0 len, second item contains the lenght of the initial directory */
 	cb_size dir_len_stack[CB_MAX_DIR_DEPTH];
 	cb_size stack_size;
 
+	handle_t handle_stack[CB_MAX_DIR_DEPTH];
 #if defined(_WIN32)
-#define CB_INVALID_FILE_HANDLE INVALID_HANDLE_VALUE
 	WIN32_FIND_DATAA find_data;
-
-	handle_t handle_stack[CB_MAX_DIR_DEPTH];
 #else
-#define CB_INVALID_FILE_HANDLE NULL
-	handle_t handle_stack[CB_MAX_DIR_DEPTH];
 	struct dirent* find_data;
 #endif
 };
+
+CB_API void cb_file_it_init(cb_file_it* it, const char* base_directory);
+
+CB_API void cb_file_it_init_recursive(cb_file_it* it, const char* base_directory);
+
+CB_API void cb_file_it_destroy(cb_file_it* it);
+
+CB_API const char* cb_file_it_current_file(cb_file_it* it);
+
+CB_API cb_bool cb_file_it_get_next(cb_file_it* it);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+#endif /* CB_FILE_IT_H */
+
+#ifdef CB_IMPLEMENTATION
 
 CB_INTERNAL void
 cb_file_it__push_dir(cb_file_it* it, const char* directory)
@@ -156,7 +181,7 @@ cb_file_it__pop_dir(cb_file_it* it)
 	}
 }
 
-CB_INTERNAL void
+CB_API void
 cb_file_it_init(cb_file_it* it, const char* base_directory)
 {
 	memset(it, 0, sizeof(cb_file_it));
@@ -167,14 +192,14 @@ cb_file_it_init(cb_file_it* it, const char* base_directory)
 	it->recursive = cb_false;
 }
 
-CB_INTERNAL void
+CB_API void
 cb_file_it_init_recursive(cb_file_it* it, const char* base_directory)
 {
 	cb_file_it_init(it, base_directory);
 	it->recursive = cb_true;
 }
 
-CB_INTERNAL void
+CB_API void
 cb_file_it_destroy(cb_file_it* it)
 {
 	while (it->stack_size > 0)
@@ -187,13 +212,13 @@ cb_file_it_destroy(cb_file_it* it)
 	it->has_next = cb_false;
 }
 
-CB_INTERNAL const char*
+CB_API const char*
 cb_file_it_current_file(cb_file_it* it)
 {
 	return it->current_file;
 }
 
-CB_INTERNAL cb_bool
+CB_API cb_bool
 cb_file_it_get_next(cb_file_it* it)
 {
 	cb_bool is_directory = cb_false;
@@ -239,4 +264,4 @@ cb_file_it_get_next(cb_file_it* it)
 	return cb_true;
 }
 
-#endif /* CB_FILE_IT_H */
+#endif /* CB_IMPLEMENTATION */

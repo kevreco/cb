@@ -1,4 +1,3 @@
-#define CB_API
 #define CB_IMPLEMENTATION
 #include <cb/cb.h>
 #include <cb_extensions/cb_assert.h>

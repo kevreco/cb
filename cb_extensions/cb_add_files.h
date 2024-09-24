@@ -156,4 +156,5 @@ cb_add_files_recursive(const char* directory, const char* pattern)
 		cb_add(cb_FILES, filepath);
 	}
 }
+
 #endif /* CB_IMPLEMENTATION */

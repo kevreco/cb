@@ -11,7 +11,7 @@ struct cb_file_it {
 	char current_file[CB_MAX_PATH];
 
 #define CB_MAX_DIR_DEPTH 256
-	/* Stack used for recursion. */
+	/* Stack used for recursion, first item has 0 len, second item contains the lenght of the initial directory */
 	cb_size dir_len_stack[CB_MAX_DIR_DEPTH];
 	cb_size stack_size;
 

@@ -1,6 +1,6 @@
 #define CB_IMPLEMENTATION
 #include <cb/cb.h>
-#include <cb_extensions/cb_extensions.h>
+#include <cb_extensions/cb_assert.h>
 
 /* Use UTF-8 strings
    NOTE: NOTE: .dlls can only contains ANSI characters.

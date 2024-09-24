@@ -1,6 +1,12 @@
 #ifndef CB_FILE_IT_H
 #define CB_FILE_IT_H
 
+#if defined(_WIN32)
+typedef HANDLE handle_t;
+#else
+typedef DIR* handle_t;
+#endif
+
 /* File iterator. Can be recursive. */
 typedef struct cb_file_it cb_file_it;
 struct cb_file_it {
@@ -19,10 +25,10 @@ struct cb_file_it {
 #define CB_INVALID_FILE_HANDLE INVALID_HANDLE_VALUE
 	WIN32_FIND_DATAA find_data;
 
-	HANDLE handle_stack[CB_MAX_DIR_DEPTH];
+	handle_t handle_stack[CB_MAX_DIR_DEPTH];
 #else
 #define CB_INVALID_FILE_HANDLE NULL
-	DIR* handle_stack[CB_MAX_DIR_DEPTH];
+	handle_t handle_stack[CB_MAX_DIR_DEPTH];
 	struct dirent* find_data;
 #endif
 };
@@ -30,11 +36,6 @@ struct cb_file_it {
 CB_INTERNAL void
 cb_file_it__push_dir(cb_file_it* it, const char* directory)
 {
-#if defined(_WIN32)
-	typedef HANDLE handle_t;
-#else
-	typedef DIR* handle_t;
-#endif
 	cb_size new_directory_len = 0;
 	cb_size n = 0;
 	handle_t handle = CB_INVALID_FILE_HANDLE;

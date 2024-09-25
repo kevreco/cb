@@ -154,6 +154,9 @@ CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name
 */
 CB_API int cb_run(const char* cmd);
 
+/* Turn on/off debug messages */
+CB_API void cb_debug(cb_bool value);
+
 CB_API cb_toolchain cb_toolchain_default(void);
 
 /* Run command and returns exit code. */
@@ -353,6 +356,8 @@ static cb_context* current_ctx;
 /* utils */
 /*-----------------------------------------------------------------------*/
 
+static cb_bool cb_debug_enabled = cb_false;
+
 #define cb_set_and_goto(result, value, goto_label) \
 	do { \
 		result = (value); \
@@ -379,7 +384,7 @@ cb_log_error(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v
 CB_INTERNAL void
 cb_log_warning(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stderr, "[CB-WARNING] ", fmt, args); va_end(args); }
 CB_INTERNAL void
-cb_log_debug(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stdout, "[CB-DEBUG] ", fmt, args); va_end(args); }
+cb_log_debug(const char* fmt, ...) { va_list args; va_start(args, fmt); if (cb_debug_enabled) { cb_log_v(stdout, "[CB-DEBUG] ", fmt, args); } va_end(args); }
 CB_INTERNAL void
 cb_log_important(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stdout, "", fmt, args); va_end(args); }
 
@@ -1983,6 +1988,12 @@ CB_API int
 cb_run(const char* executable_path)
 {
 	return cb_subprocess(cb_tmp_sprintf("\"%s\"", executable_path));
+}
+
+CB_API void
+cb_debug(cb_bool value)
+{
+	cb_debug_enabled = value;
 }
 
 #if _WIN32

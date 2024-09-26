@@ -25,7 +25,7 @@ int main(void)
         NULL);
 #endif
 
-    path = cb_bake("gui");
+    path = cb_bake();
 
     cb_assert_file_exists(path);
 

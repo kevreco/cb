@@ -17,7 +17,7 @@ int main(void)
 
         cb_add(cb_FILES, "s r c/f o o.c");
 
-        path = cb_bake("f o o");
+        path = cb_bake();
 
         cb_assert_file_exists(path);
     }
@@ -31,7 +31,7 @@ int main(void)
 
         cb_add(cb_DEFINES, "BAR_LIB_EXPORT");
 
-        path = cb_bake("b a r");
+        path = cb_bake();
 
         cb_assert_file_exists(path);
     }
@@ -46,7 +46,7 @@ int main(void)
         cb_add(cb_LINK_PROJECTS, "f o o");
         cb_add(cb_LINK_PROJECTS, "b a r");
 
-        path = cb_bake("e x e");
+        path = cb_bake();
 
         cb_assert_file_exists(path);
 

@@ -17,7 +17,7 @@ int main(void)
 
         cb_add(cb_FILES, "src/foo.c");
 
-        path = cb_bake("foo");
+        path = cb_bake();
 
         cb_assert_file_exists(path);
     }
@@ -31,7 +31,7 @@ int main(void)
 
         cb_add(cb_DEFINES, "BAR_LIB_EXPORT");
 
-        path = cb_bake("bar");
+        path = cb_bake();
 
         cb_assert_file_exists(path);
     }
@@ -46,7 +46,7 @@ int main(void)
         cb_add(cb_LINK_PROJECTS, "foo");
         cb_add(cb_LINK_PROJECTS, "bar");
 
-        path = cb_bake("exe");
+        path = cb_bake();
 
         cb_assert_file_exists(path);
 

@@ -14,7 +14,7 @@ int main(void)
     cb_add(cb_FILES, "src/main.c");
     cb_add(cb_FILES, "src/value.c");
 
-    path = cb_bake("exe");
+    path = cb_bake();
 
     cb_assert_file_exists(path);
     

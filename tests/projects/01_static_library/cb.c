@@ -13,7 +13,7 @@ int main(void)
     cb_add(cb_FILES, "src/string.c");
 
     cb_assert_file_exists(
-        cb_bake("foo")
+        cb_bake()
     );
 
     cb_destroy();

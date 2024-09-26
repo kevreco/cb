@@ -150,10 +150,13 @@ struct cb_toolchain {
    Returns the name of the result, which could be the path of a library or any other value depending on the toolchain.
    Use the default toolchain (gcc or msvc).
 */
-CB_API const char* cb_bake(const char* project_name);
+CB_API const char* cb_bake(void);
+
+/* Same as cb_bake. Using an explicit projectname. */
+CB_API const char* cb_bake_project(const char* project_name);
 
 /* Same as cb_bake. Take an explicit toolchain instead of using the default one. */
-CB_API const char* cb_bake_with(cb_toolchain toolchain, const char* project_name);
+CB_API const char* cb_bake_project_with(cb_toolchain toolchain, const char* project_name);
 
 /* Run executable path. Path is double quoted before being run, in case path contains some space.
    Returns exit code. Returns -1 if command could not be executed.
@@ -2006,7 +2009,7 @@ cb_property_equals(cb_project_t* project, const char* key, const char* compariso
 }
 
 CB_API const char*
-cb_bake_with(cb_toolchain toolchain, const char* project_name)
+cb_bake_project_with(cb_toolchain toolchain, const char* project_name)
 {
 	const char* result = toolchain.bake(&toolchain, project_name);
 	cb_log_important("%s", result);
@@ -2014,9 +2017,16 @@ cb_bake_with(cb_toolchain toolchain, const char* project_name)
 }
 
 CB_API const char*
-cb_bake(const char* project_name)
+cb_bake_project(const char* project_name)
 {
-	return cb_bake_with(cb_toolchain_default(), project_name);
+	return cb_bake_project_with(cb_toolchain_default(), project_name);
+}
+
+CB_API const char*
+cb_bake(void)
+{
+	cb_project_t* p = cb_current_project();
+	return cb_bake_project(p->name.data);
 }
 
 CB_INTERNAL const char*

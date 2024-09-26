@@ -2378,7 +2378,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	cb_create_directories(output_dir, strlen(output_dir));
 
 	/* Use /utf-8 by default since it's retrocompatible with utf-8 */
-	cb_dstr_append_str(&str, "cl.exe /utf-8 ");
+	/* Use /nologo to avoid undesirable messages in the command line. */
+	cb_dstr_append_str(&str, "cl.exe /utf-8 /nologo ");
 
 	/* Handle binary type */
 
@@ -2551,8 +2552,8 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	
 	if (is_static_library)
 	{
-		/* lib.exe /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
-		tmp = cb_tmp_sprintf("lib.exe /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
+		/* lib.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
+		tmp = cb_tmp_sprintf("lib.exe /NOLOGO /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
 		if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
 		{
 			cb_log_error("Could not execute command to build static library\n");

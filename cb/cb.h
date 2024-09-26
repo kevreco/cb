@@ -94,16 +94,19 @@ CB_API void cb_clear(void);
 /* Set or create current project.  */
 CB_API cb_project_t* cb_project(const char* name); 
 
+/* Wrapper around cb_project with string formatting. */
+CB_API cb_project_t* cb_project_f(const char* format, ...);
+
 /* Add value for the specific key. */
 CB_API void cb_add(const char* key, const char* value);
 
-/* Wrapper of cb_set with string formatting */
+/* Wrapper around cb_set with string formatting. */
 CB_API void cb_add_f(const char* key, const char* format, ...);
 
-/* Add multiple string values. The last value must be a null value */
+/* Add multiple string values. The last value must be a null value. */
 CB_API void cb_add_many_vnull(const char* key, ...);
 
-/* Add multiple values using var args macro */
+/* Add multiple values using var args macro. */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 or later */
 #define cb_add_many_v(key, ...) \
 	cb_add_many(key \
@@ -114,13 +117,13 @@ CB_API void cb_add_many_vnull(const char* key, ...);
 /* Remove all previous values according to the key and set the new one. */
 CB_API void cb_set(const char* key, const char* value);
 
-/* Wrapper around cb_set with string formatting */
+/* Wrapper around cb_set with string formatting. */
 CB_API void cb_set_f(const char* key, const char* format, ...);
 
-/* Remove all values associated with the key. Returns number of removed values */
+/* Remove all values associated with the key. Returns number of removed values. */
 CB_API cb_size cb_remove_all(const char* key);
 
-/* Wrapper around cb_remove_all with string formatting */
+/* Wrapper around cb_remove_all with string formatting. */
 CB_API cb_size cb_remove_all_f(const char* format, ...);
 
 /* Remove item with the exact key and value. */
@@ -132,12 +135,12 @@ CB_API cb_bool cb_remove_one_f(const char* key, const char* format, ...);
 /* Check if key/value already exists in the current project. */
 CB_API cb_bool cb_contains(const char* key, const char* value);
 
-/* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain */
+/* Returns the name of the result, which could be the path of a library or any other value depending on the toolchain. */
 typedef const char* (*cb_toolchain_bake_t)(cb_toolchain* tc, const char*);
 
 struct cb_toolchain {
 	cb_toolchain_bake_t bake;
-	/* Name of the toolchain, mostly for debugging purpose */
+	/* Name of the toolchain, mostly for debugging purpose. */
 	const char* name;
 	/* Name of the default directory. */
 	const char* default_directory_base;
@@ -1784,6 +1787,20 @@ cb_project(const char* name)
 
 	cb_current_context()->current_project = project;
 	return project;
+}
+
+CB_API cb_project_t*
+cb_project_f(const char* format, ...)
+{
+	cb_project_t* p;
+	va_list args;
+	va_start(args, format);
+
+	p = cb_project(cb_tmp_vsprintf(format, args));
+
+	va_end(args);
+
+	return p;
 }
 
 CB_API void

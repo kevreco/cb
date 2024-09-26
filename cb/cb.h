@@ -88,6 +88,9 @@ typedef struct cb_context cb_context;
 CB_API void cb_init(void);
 CB_API void cb_destroy(void);
 
+/* Delete projects */
+CB_API void cb_clear(void);
+
 /* Set or create current project.  */
 CB_API cb_project_t* cb_project(const char* name); 
 
@@ -1109,7 +1112,7 @@ cb_context_init(cb_context* ctx)
 {
 	memset(ctx, 0, sizeof(cb_context));
 	cb_mmap_init(&ctx->projects);
-	ctx->current_project = 0;
+	ctx->current_project = NULL;
 }
 
 CB_INTERNAL void
@@ -1117,6 +1120,28 @@ cb_context_destroy(cb_context* ctx)
 {
 	cb_mmap_destroy(&ctx->projects);
 	cb_context_init(ctx);
+}
+
+CB_INTERNAL void cb_project_destroy(cb_project_t* project);
+
+CB_INTERNAL void
+cb_context_clear(cb_context* ctx)
+{
+	cb_size i = 0;
+	cb_size size = cb_darrT_size(&ctx->projects);
+	cb_kv kv = { 0 };
+	cb_project_t* p = NULL;
+
+	for (; i < size; ++i)
+	{
+		kv = cb_darrT_at(&ctx->projects, i);
+		p = (cb_project_t*)kv.u.ptr;
+		cb_project_destroy(p);
+	}
+	
+	ctx->projects.darr.size = 0;
+
+	ctx->current_project = NULL;
 }
 
 CB_INTERNAL cb_context*
@@ -1171,6 +1196,7 @@ cb_project_init(cb_project_t* project, cb_strv name)
 CB_INTERNAL void
 cb_project_destroy(cb_project_t* project)
 {
+	CB_ASSERT(project);
 	cb_mmap_destroy(&project->mmap);
 }
 
@@ -1735,7 +1761,14 @@ cb_init(void)
 CB_API void
 cb_destroy(void)
 {
-	cb_context_destroy(&default_ctx);
+	cb_context_destroy(cb_current_context());
+	cb_tmp_reset();
+}
+
+CB_API void
+cb_clear(void)
+{
+	cb_context_clear(cb_current_context());
 	cb_tmp_reset();
 }
 

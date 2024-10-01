@@ -66,6 +66,15 @@
 #define CB_FREE free
 #endif
 
+/*
+   CB_PROCESS_OUTPUT_TO_STRING redirect the standard output into a string 
+   retrieved from cb_process_get_output(process_handle).
+   This is mostly an internal settings kept for debugging purpose.
+*/
+#ifndef CB_PROCESS_OUTPUT_TO_STRING
+#define CB_PROCESS_OUTPUT_TO_STRING (1)
+#endif
+
 #define cb_true ((cb_bool)1)
 #define cb_false ((cb_bool)0)
 
@@ -84,6 +93,7 @@ typedef struct cb_strv cb_strv;
 typedef struct cb_darr cb_darr;
 typedef struct cb_kv cb_kv;
 typedef struct cb_context cb_context;
+typedef struct cb_process_handle cb_process_handle;
 
 CB_API void cb_init(void);
 CB_API void cb_destroy(void);
@@ -169,9 +179,22 @@ CB_API void cb_debug(cb_bool value);
 CB_API cb_toolchain cb_toolchain_default(void);
 
 /* Run command and returns exit code. */
-CB_API int cb_subprocess(const char* cmd);
-/* Same as cb_subprocess but provide a starting directory. */
-CB_API int cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory);
+CB_API int cb_process(const char* cmd);
+
+/* Same as cb_process but provide a starting directory. */
+CB_API int cb_process_in_directory(const char* cmd, const char* directory);
+
+/* Start command and wait for the process to end. cb_process_end needs to be called to cleanup various resources. */
+CB_API cb_process_handle* cb_process_start(const char* cmd);
+
+/* Same as cb_process_start but provide a starting directory. */
+CB_API cb_process_handle* cb_process_start_in_directory(const char* cmd, const char* starting_directory);
+
+/* Get output of the process after cb_process_start has been called. */
+CB_API const char* cb_process_get_output(cb_process_handle* handle);
+
+/* Returns exit code of the process and clean up resources. */
+CB_API int cb_process_end(cb_process_handle* handle);
 
 /* Commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
@@ -321,8 +344,6 @@ struct cb_darr {
 
 /* dynamic string */
 typedef cb_darr cb_dstr;
-
-typedef char* cb_darr_it;
 
 /* key/value data used in the map and mmap struct */
 struct cb_kv {
@@ -2044,36 +2065,101 @@ cb_get_output_directory(cb_project_t* project, const cb_toolchain* tc)
 	}
 }
 
-CB_API int
-cb_run(const char* executable_path)
-{
-	return cb_subprocess(cb_tmp_sprintf("\"%s\"", executable_path));
-}
-
 CB_API void
 cb_debug(cb_bool value)
 {
 	cb_debug_enabled = value;
 }
 
+struct cb_process_handle {
+	const char* cmd;
+	const char* starting_directory;
+	cb_dstr output;
+	int exit_code;
+};
+
+CB_INTERNAL cb_process_handle* cb_process_start_core(cb_process_handle* handle);
+
+CB_API int
+cb_process(const char* cmd)
+{
+	cb_process_handle* handle = cb_process_start_in_directory(cmd, NULL);
+	return cb_process_end(handle);
+}
+
+CB_API int
+cb_process_in_directory(const char* cmd, const char* directory)
+{
+	cb_process_handle* handle = cb_process_start_in_directory(cmd, directory);
+	return cb_process_end(handle);
+}
+
+CB_API cb_process_handle*
+cb_process_start(const char* cmd)
+{
+	return cb_process_start_in_directory(cmd, NULL);
+}
+
+CB_API cb_process_handle*
+cb_process_start_in_directory(const char* cmd, const char* directory)
+{
+	cb_process_handle* handle = (cb_process_handle*)cb_tmp_alloc(sizeof(cb_process_handle));
+	memset(handle, 0, sizeof(cb_process_handle));
+
+	handle->cmd = cmd;
+	handle->starting_directory = directory;
+	handle->exit_code = -1;
+
+	cb_dstr_init(&handle->output);
+
+	return cb_process_start_core(handle);
+}
+
+CB_API int
+cb_run(const char* executable_path)
+{
+	cb_process_handle* handle = cb_process_start(cb_tmp_sprintf("\"%s\"", executable_path));
+	cb_process_end(handle);
+	return handle->exit_code;
+}
+
+CB_API const char*
+cb_process_get_output(cb_process_handle* handle)
+{
+	return handle->output.data;
+}
+
+CB_API int
+cb_process_end(cb_process_handle* handle)
+{
+	cb_dstr_destroy(&handle->output);
+	return handle->exit_code;
+}
+
 #if _WIN32
 
-/* #process #subprocess */
+/* #process */
 
-/* The char* cmd should be writtable */
-CB_API int
-cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
+CB_INTERNAL cb_process_handle*
+cb_process_start_core(cb_process_handle* handle)
 {
-	DWORD exit_status = (DWORD)-1;
+	HANDLE process_std_write = NULL; /* To write out of child process */
+	HANDLE process_std_read = NULL;  /* To read output of child process */
+	SECURITY_ATTRIBUTES saAttr;      /* To create pipe to read output of child process. */
 
-	wchar_t* cmd_w = cb_utf8_to_utf16(cmd);
+	DWORD exit_code = (DWORD) -1;
+	DWORD wait_result = 0;
+	DWORD byte_read_from_buffer = 0;
+	char process_output_buffer[256] = { 0 };
+
+	wchar_t* cmd_w = cb_utf8_to_utf16(handle->cmd);
 	wchar_t* starting_directory_w = NULL;
 
-	cb_log_debug("Running subprocess '%s'", cmd);
-	if (starting_directory && starting_directory[0])
+	cb_log_debug("Running process '%s'", handle->cmd);
+	if (handle->starting_directory && handle->starting_directory[0])
 	{
-		starting_directory_w = cb_utf8_to_utf16(starting_directory);
-		cb_log_debug("Subprocess started in directory '%s'", starting_directory);
+		starting_directory_w = cb_utf8_to_utf16(handle->starting_directory);
+		cb_log_debug("Subprocess started in directory '%s'", handle->starting_directory);
 	}
 
 	/* Ensure that everything is written into the outputs before creating a new process that will also write in those outputs */
@@ -2085,6 +2171,32 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 
 	ZeroMemory(&si, sizeof(si));
 	si.cb = sizeof(si);
+
+	if (CB_PROCESS_OUTPUT_TO_STRING)
+	{
+		saAttr.nLength = sizeof(SECURITY_ATTRIBUTES);
+		saAttr.bInheritHandle = TRUE;
+		saAttr.lpSecurityDescriptor = NULL;
+		 
+		/* Create a pipe for the child process's STDOUT. */
+		if (!CreatePipe(&process_std_read, &process_std_write, &saAttr, 0))
+		{
+			cb_log_error("Could not create pipe.");
+			exit(1);
+		}
+
+		/* Ensure the read handle to the pipe for STDOUT is not inherited. */
+		if (!SetHandleInformation(process_std_read, HANDLE_FLAG_INHERIT, 0))
+		{
+			cb_log_error("Could not set handle information.");
+			exit(1);
+		}
+
+		si.hStdError = process_std_write;
+		si.hStdOutput = process_std_write;
+		si.dwFlags |= STARTF_USESTDHANDLES;
+	}
+
 	ZeroMemory(&pi, sizeof(pi));
 
 	/* Start the child process.
@@ -2095,7 +2207,7 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 		cmd_w,                /* Command line */
 		NULL,                 /* Process handle not inheritable */
 		NULL,                 /* Thread handle not inheritable */ 
-		FALSE,                /* Set handle inheritance to FALSE */
+		CB_PROCESS_OUTPUT_TO_STRING ? TRUE : FALSE, /* Set handle inheritance */
 		0,                    /* No creation flags */
 		NULL,                 /* Use parent's environment block */
 		starting_directory_w, /* Use parent's starting directory */
@@ -2105,21 +2217,25 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 	{
 		cb_log_error("CreateProcessW failed: %d", GetLastError());
 		/* No need to close handles since the process creation failed */
-		return -1;
+		return handle;
 	}
 
-	DWORD result = WaitForSingleObject(
-					  pi.hProcess, /* HANDLE hHandle, */
-					  INFINITE     /* DWORD  dwMilliseconds */
+	wait_result = WaitForSingleObject(
+		pi.hProcess, /* HANDLE hHandle, */
+		INFINITE     /* DWORD  dwMilliseconds */
 	);
 
-	if (result != WAIT_FAILED)
+	if (wait_result == WAIT_FAILED)
 	{
-		if (GetExitCodeProcess(pi.hProcess, &exit_status))
+		cb_log_error("Could not wait on child process: %lu", GetLastError());
+	}
+	else
+	{
+		if (GetExitCodeProcess(pi.hProcess, &exit_code))
 		{
-			if (exit_status != 0)
+			if (exit_code != 0)
 			{
-				cb_log_error("Command exited with exit code %lu", exit_status);
+				cb_log_error("Command exited with exit code %lu", exit_code);
 			}
 		}
 		else
@@ -2127,20 +2243,30 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 			cb_log_error("Could not get process exit code: %lu", GetLastError());
 		}
 	}
-	else
-	{
-		cb_log_error("Could not wait on child process: %lu", GetLastError());
-	}
 
+	if (CB_PROCESS_OUTPUT_TO_STRING)
+	{
+		/* We need to close the write handle to be able to properly read the other handle without blocking the thread. */
+		CloseHandle(process_std_write);
+		/* Read output from the child process's pipe for STDOUT. Stop when there is no more data. */
+		{
+			while (ReadFile(process_std_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
+				&& byte_read_from_buffer != 0)
+			{
+				cb_dstr_append_f(&handle->output, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
+			}
+			CloseHandle(process_std_read);
+		}
+	}
 
 	/* Close process and thread handles. */
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
-	
-	return (int)exit_status;
+
+	handle->exit_code = exit_code;
+	return handle;
 }
 #else
-
 
 /* space or tab */
 CB_INTERNAL cb_bool cb_is_space(char c) { return c == ' ' || c == '\t'; }
@@ -2227,45 +2353,66 @@ cb_get_next_arg(const char* str, cb_strv* sv)
 #define CB_INVALID_PROCESS (-1)
 
 CB_INTERNAL pid_t
-cb_fork_process(char* args[], const char* starting_directory)
+cb_fork_process(char* args[], const char* starting_directory, int pipe_fd[2])
 {
 	pid_t pid = fork();
-	if (pid < 0) {
+
+	switch (pid)
+	{
+	case -1: /* Error */
 		cb_log_error("Could not fork child process: %s", strerror(errno));
 		return CB_INVALID_PROCESS;
-	}
+	case 0:  /* Child process */
+	{
+		if (CB_PROCESS_OUTPUT_TO_STRING)
+		{
+			/* Replace stdout with pipe 'write' file descriptor.
+			*  @FIXME: stderr is not handled.
+			*/
+			dup2(pipe_fd[1], 1);
+		}
 
-	if (pid == 0) {
 		/* Change directory in the fork */
-		if(starting_directory && starting_directory[0] && chdir(starting_directory) < 0) {
+		if (starting_directory && starting_directory[0] && chdir(starting_directory) < 0) {
 			cb_log_error("Could not change directory to '%s': %s", starting_directory, strerror(errno));
 			return CB_INVALID_PROCESS;
 		}
 		if (execvp(args[0], args) == CB_INVALID_PROCESS) {
 			cb_log_error("Could not exec child process: %s", strerror(errno));
-			exit(1);
+			return CB_INVALID_PROCESS;
 		}
 		CB_ASSERT(0 && "unreachable");
+		break;
 	}
+	default:
+		/* Do nothing for parent process */
+		break;
+	}
+
 	return pid;
 }
 
-CB_API int
-cb_subprocess_with_starting_directory(const char* cmd, const char* starting_directory)
+CB_INTERNAL cb_process_handle*
+cb_process_start_core(cb_process_handle* handle)
 {
+	cb_bool can_read_output = cb_true;
 	cb_darrT(const char*) args;
 	cb_strv arg; /* Current argument */
-	const char* cmd_cursor = cmd; /* Current position in the string command */
+	const char* cmd_cursor = handle->cmd; /* Current position in the string command */
 	pid_t pid = CB_INVALID_PROCESS;
 	int wstatus = 0; /* pid wait status */
 	int exit_status = -1;
 
+	ssize_t bytes_read = 0;   /* Byte read count when we retrieve the output of the child process. */
+	char buffer[256] = { 0 }; /* Buffer to get the output of the child process. */
+	int pipe_fd[2] = { 0 };     /* Pipe file descriptor. */
+
 	cb_darrT_init(&args);
 
-	cb_log_debug("Running subprocess '%s'", cmd);
-	if (starting_directory && starting_directory[0])
+	cb_log_debug("Running process '%s'", handle->cmd);
+	if (handle->starting_directory && handle->starting_directory[0])
 	{
-		cb_log_debug("Subprocess started in directory '%s'", starting_directory);
+		cb_log_debug("Subprocess started in directory '%s'", handle->starting_directory);
 	}
 
 	/* Ensure that everything is written into the outputs before creating a new process that will also write in those outputs */
@@ -2284,50 +2431,67 @@ cb_subprocess_with_starting_directory(const char* cmd, const char* starting_dire
 		cb_darrT_push_back(&args, NULL);
 	}
 
-	pid = cb_fork_process((char**)args.darr.data, starting_directory);
+	if (CB_PROCESS_OUTPUT_TO_STRING)
+	{
+		if (pipe(pipe_fd) == -1)
+		{
+			cb_log_error("Pipe creation failed for pipe_fd");
+			cb_set_and_goto(exit_status, -1, cleanup);
+		}
+	}
+
+	pid = cb_fork_process((char**)args.darr.data, handle->starting_directory, pipe_fd);
+
 	if (pid == CB_INVALID_PROCESS)
 	{
-		cb_darrT_destroy(&args);
-		return -1;
+		cb_set_and_goto(exit_status, -1, cleanup);
 	}
 
 	/* wait for process to be done */
 	for (;;) {
 		if (waitpid(pid, &wstatus, 0) < 0) {
 			cb_log_error("Could not wait on command (pid %d): '%s'", pid, strerror(errno));
-			cb_darrT_destroy(&args);
-			return -1;
+			cb_set_and_goto(exit_status, -1, cleanup);
 		}
 
 		if (WIFEXITED(wstatus)) {
 			exit_status = WEXITSTATUS(wstatus);
 			if (exit_status != 0) {
 				cb_log_error("Command exited with exit code '%d'", exit_status);
-				cb_darrT_destroy(&args);
-				return -1;
+				cb_set_and_goto(exit_status, -1, cleanup);
 			}
 
-			break;
+			break; /* Get out of the loop since the process exited. */
 		}
 
 		if (WIFSIGNALED(wstatus)) {
 			cb_log_error("Command process was terminated by '%s'", strsignal(WTERMSIG(wstatus)));
-			cb_darrT_destroy(&args);
-			return -1;
+			cb_set_and_goto(exit_status, -1, cleanup);
 		}
 	}
-	
+
+	if (CB_PROCESS_OUTPUT_TO_STRING)
+	{
+		/* Close the write pipe since the child program has been exited. */
+		close(pipe_fd[1]);
+
+		/* Read output of the child process from the read file description of the pipe. */
+		while ((bytes_read = read(pipe_fd[0], buffer, sizeof(buffer))) > 0)
+		{
+			cb_dstr_append_f(&handle->output, "%.*s", (int)bytes_read, buffer);
+		}
+
+		/* Close the read pipe since we read all the information from it. */
+		close(pipe_fd[0]);
+	}
+
+cleanup:
 	cb_darrT_destroy(&args);
-	return exit_status;
+	handle->exit_code = exit_status;
+	return handle;
 }
 
 #endif
-
-CB_API int
-cb_subprocess(const char* path)
-{
-	return cb_subprocess_with_starting_directory(path, NULL);
-}
 
 #ifdef _WIN32
 
@@ -2545,7 +2709,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* execute cl.exe */
-	if (cb_subprocess_with_starting_directory(str.data, output_dir) != 0)
+	if (cb_process_in_directory(str.data, output_dir) != 0)
 	{
 		cb_set_and_goto(artefact, NULL, exit);
 	}
@@ -2554,7 +2718,7 @@ cb_toolchain_msvc_bake(cb_toolchain* tc, const char* project_name)
 	{
 		/* lib.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
 		tmp = cb_tmp_sprintf("lib.exe /NOLOGO /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
-		if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
+		if (cb_process_in_directory(tmp, output_dir) != 0)
 		{
 			cb_log_error("Could not execute command to build static library\n");
 			cb_set_and_goto(artefact, NULL, exit);
@@ -2804,7 +2968,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 	}
 
 	/* Example: gcc <includes> -c  <c source files> */
-	if (cb_subprocess_with_starting_directory(str.data, output_dir) != 0)
+	if (cb_process_in_directory(str.data, output_dir) != 0)
 	{
 		cb_set_and_goto(artefact, NULL, exit);
 	}
@@ -2816,7 +2980,7 @@ cb_toolchain_gcc_bake(cb_toolchain* tc, const char* project_name)
 			/* Create libXXX.a in the output directory */
 			/* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
 			tmp = cb_tmp_sprintf("ar -crs \"%s\" %s ", artefact, str_obj.data);
-			if (cb_subprocess_with_starting_directory(tmp, output_dir) != 0)
+			if (cb_process_in_directory(tmp, output_dir) != 0)
 			{
 				cb_set_and_goto(artefact, NULL, exit);
 			}

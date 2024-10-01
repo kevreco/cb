@@ -190,8 +190,11 @@ CB_API cb_process_handle* cb_process_start(const char* cmd);
 /* Same as cb_process_start but provide a starting directory. */
 CB_API cb_process_handle* cb_process_start_in_directory(const char* cmd, const char* starting_directory);
 
-/* Get output of the process after cb_process_start has been called. */
-CB_API const char* cb_process_get_output(cb_process_handle* handle);
+/* Get stdout content of the process after cb_process_start has been called. */
+CB_API const char* cb_process_get_stdout(cb_process_handle* handle);
+
+/* Get stderr content of the process after cb_process_start has been called. */
+CB_API const char* cb_process_get_stderr(cb_process_handle* handle);
 
 /* Returns exit code of the process and clean up resources. */
 CB_API int cb_process_end(cb_process_handle* handle);
@@ -2074,7 +2077,8 @@ cb_debug(cb_bool value)
 struct cb_process_handle {
 	const char* cmd;
 	const char* starting_directory;
-	cb_dstr output;
+	cb_dstr out;
+	cb_dstr err;
 	int exit_code;
 };
 
@@ -2110,7 +2114,8 @@ cb_process_start_in_directory(const char* cmd, const char* directory)
 	handle->starting_directory = directory;
 	handle->exit_code = -1;
 
-	cb_dstr_init(&handle->output);
+	cb_dstr_init(&handle->out);
+	cb_dstr_init(&handle->err);
 
 	return cb_process_start_core(handle);
 }
@@ -2124,15 +2129,22 @@ cb_run(const char* executable_path)
 }
 
 CB_API const char*
-cb_process_get_output(cb_process_handle* handle)
+cb_process_get_stdout(cb_process_handle* handle)
 {
-	return handle->output.data;
+	return handle->out.data;
+}
+
+CB_API const char*
+cb_process_get_stderr(cb_process_handle* handle)
+{
+	return handle->err.data;
 }
 
 CB_API int
 cb_process_end(cb_process_handle* handle)
 {
-	cb_dstr_destroy(&handle->output);
+	cb_dstr_destroy(&handle->out);
+	cb_dstr_destroy(&handle->err);
 	return handle->exit_code;
 }
 
@@ -2143,9 +2155,11 @@ cb_process_end(cb_process_handle* handle)
 CB_INTERNAL cb_process_handle*
 cb_process_start_core(cb_process_handle* handle)
 {
-	HANDLE process_std_write = NULL; /* To write out of child process */
-	HANDLE process_std_read = NULL;  /* To read output of child process */
-	SECURITY_ATTRIBUTES saAttr;      /* To create pipe to read output of child process. */
+	HANDLE process_stdout_write = NULL; /* Pipe (write) for stdout of the child process */
+	HANDLE process_stdout_read = NULL;  /* Pipe (read) for stdout of the child process */
+	HANDLE process_stderr_write = NULL; /* Pipe (write) for stderr of the child process */
+	HANDLE process_stderr_read = NULL;  /* Pipe (read) for stderr of the child process */
+	SECURITY_ATTRIBUTES saAttr;         /* To create the pipes. */
 
 	DWORD exit_code = (DWORD) -1;
 	DWORD wait_result = 0;
@@ -2178,22 +2192,24 @@ cb_process_start_core(cb_process_handle* handle)
 		saAttr.bInheritHandle = TRUE;
 		saAttr.lpSecurityDescriptor = NULL;
 		 
-		/* Create a pipe for the child process's STDOUT. */
-		if (!CreatePipe(&process_std_read, &process_std_write, &saAttr, 0))
+		/* Create a pipe for the child process's stdout. */
+		if (!CreatePipe(&process_stdout_read, &process_stdout_write, &saAttr, 0)
+			|| !SetHandleInformation(process_stdout_read, HANDLE_FLAG_INHERIT, 0))
 		{
-			cb_log_error("Could not create pipe.");
+			cb_log_error("Could not create pipe for stdout.");
+			exit(1);
+		}
+		/* Create a pipe for the child process's stderr. */
+		if (!CreatePipe(&process_stderr_read, &process_stderr_write, &saAttr, 0)
+			|| !SetHandleInformation(process_stderr_read, HANDLE_FLAG_INHERIT, 0))
+		{
+			cb_log_error("Could not create pipe for stderr.");
 			exit(1);
 		}
 
-		/* Ensure the read handle to the pipe for STDOUT is not inherited. */
-		if (!SetHandleInformation(process_std_read, HANDLE_FLAG_INHERIT, 0))
-		{
-			cb_log_error("Could not set handle information.");
-			exit(1);
-		}
-
-		si.hStdError = process_std_write;
-		si.hStdOutput = process_std_write;
+		si.hStdOutput = process_stdout_write;
+		si.hStdError = process_stderr_write;
+		
 		si.dwFlags |= STARTF_USESTDHANDLES;
 	}
 
@@ -2218,6 +2234,13 @@ cb_process_start_core(cb_process_handle* handle)
 		cb_log_error("CreateProcessW failed: %d", GetLastError());
 		/* No need to close handles since the process creation failed */
 		return handle;
+	}
+
+	/* Close the write ends of the pipes since they will not be used in the parent process. */
+	if (CB_PROCESS_OUTPUT_TO_STRING)
+	{
+		CloseHandle(process_stdout_write);
+		CloseHandle(process_stderr_write);
 	}
 
 	wait_result = WaitForSingleObject(
@@ -2246,22 +2269,29 @@ cb_process_start_core(cb_process_handle* handle)
 
 	if (CB_PROCESS_OUTPUT_TO_STRING)
 	{
-		/* We need to close the write handle to be able to properly read the other handle without blocking the thread. */
-		CloseHandle(process_std_write);
-		/* Read output from the child process's pipe for STDOUT. Stop when there is no more data. */
+		/* Read output from the child process's pipe for stdout. Stop when there is no more data. */
+		while (ReadFile(process_stdout_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
+			&& byte_read_from_buffer != 0)
 		{
-			while (ReadFile(process_std_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
-				&& byte_read_from_buffer != 0)
-			{
-				cb_dstr_append_f(&handle->output, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
-			}
-			CloseHandle(process_std_read);
+			cb_dstr_append_f(&handle->out, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
+		}
+
+		while (ReadFile(process_stderr_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
+			&& byte_read_from_buffer != 0)
+		{
+			cb_dstr_append_f(&handle->err, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
 		}
 	}
 
 	/* Close process and thread handles. */
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
+
+	if (CB_PROCESS_OUTPUT_TO_STRING)
+	{
+		CloseHandle(process_stdout_read);
+		CloseHandle(process_stderr_read);
+	}
 
 	handle->exit_code = exit_code;
 	return handle;
@@ -2478,7 +2508,7 @@ cb_process_start_core(cb_process_handle* handle)
 		/* Read output of the child process from the read file description of the pipe. */
 		while ((bytes_read = read(pipe_fd[0], buffer, sizeof(buffer))) > 0)
 		{
-			cb_dstr_append_f(&handle->output, "%.*s", (int)bytes_read, buffer);
+			cb_dstr_append_f(&handle->out, "%.*s", (int)bytes_read, buffer);
 		}
 
 		/* Close the read pipe since we read all the information from it. */

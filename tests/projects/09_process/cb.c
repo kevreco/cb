@@ -24,7 +24,7 @@ int main(void)
     
     handle = cb_process_start(path);
 
-    output = cb_process_get_output(handle);
+    output = cb_process_get_stdout(handle);
 
 #ifdef _WIN32
     /* Windows default mode for stdout is "text" which translate \n to \r\n. */

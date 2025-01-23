@@ -27,6 +27,7 @@ jobs:
       - name: build
         shell: bash
         run: |
+          sudo apt install libx11-dev
           chmod +x cb.sh
           chmod +x tests.sh
           ./tests.sh

@@ -6,8 +6,8 @@ int main(void)
 {
     const char* path = NULL;
     const char* output = NULL;
-
     cb_process_handle* handle;
+    
     cb_init();
 
     cb_toolchain_set(cb_toolchain_default_cpp());

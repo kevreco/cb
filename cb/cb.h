@@ -1859,19 +1859,19 @@ cb_project_f(const char* format, ...)
 	return p;
 }
 
-/* Set current toolchain.  */
+/* Set current toolchain. */
 CB_API void
 cb_toolchain_set(cb_toolchain_t tc)
 {
 	cb_current_context()->current_toolchain = tc;
 }
 
-/* Get current toolchain.  */
+/* Get current toolchain. */
 CB_API cb_toolchain_t
 cb_toolchain_get()
 {
 	cb_toolchain_t tc = cb_current_context()->current_toolchain;
-	// No toolchain: return the default C toolchain.
+	/* No toolchain: return the default C toolchain. */
 	if (!tc.name)
 	{
 		return cb_toolchain_default_c();

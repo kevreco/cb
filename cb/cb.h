@@ -81,6 +81,17 @@
 extern "C" {
 #endif
 
+typedef signed char cb_i8;
+typedef unsigned char cb_u8;
+typedef short  cb_i16;
+typedef unsigned short cb_u16;
+typedef int  cb_i32;
+typedef unsigned cb_u32;
+typedef long long  cb_i64;
+typedef unsigned long long cb_u64;
+
+#define CB_U64_FMT "%llu"
+
 typedef unsigned int cb_id; /* hashed key, must be unsigned */
 typedef unsigned int cb_bool;
 typedef size_t cb_size;
@@ -213,6 +224,26 @@ CB_API const char* cb_process_stderr_string(cb_process_handle* handle);
 /* Returns exit code of the process and clean up resources. */
 CB_API int cb_process_end(cb_process_handle* handle);
 
+/* @TODO comment cb_plugin */
+
+typedef struct cb_plugin cb_plugin;
+struct cb_plugin
+{
+    const char* name;
+    
+    void (*bake_starting)(cb_plugin* plugin);
+    void (*register_file)(cb_plugin* plugin, cb_strv absolute_filepath);
+    const char* (*extra_argument)(cb_plugin* plugin);
+    
+    cb_bool (*can_process_file)(cb_plugin* plugin, const char* file);
+
+    void (*project_processed)(cb_plugin* plugin, const char* std_out, const char* std_err);
+     void (*destroy)(cb_plugin* plugin);
+};
+
+/* @TODO comment  */
+CB_API void cb_init_with_plugins(cb_plugin** plugins, int plugin_count);
+
 /* Commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
 /* keys */
@@ -292,8 +323,12 @@ const char* cb_STATIC_LIBRARY = "static_library";
 /* string view */
 struct cb_strv {
 	cb_size size;
-	const char* data;
+	char* data;
 };
+
+#define CB_STRV(x) { sizeof((x)) - 1, (char*)x}
+#define CB_STRV_FMT "%.*s"
+#define CB_STRV_ARG(x) ((int)(x).size), ((x).data)
 
 /* dynamic array
  * NOTE: cb_darr needs to start with the same component as cb_strv
@@ -390,11 +425,18 @@ struct cb_project_t {
 	cb_mmap mmap; /* multi map of strings - when you want to have multiple values per key */
 };
 
+/* plugin */
+
+#define CB_MAX_PLUGIN 32
+
 /* context, the root which hold everything */
 struct cb_context {
 	cb_mmap projects;
 	cb_project_t* current_project;
 	cb_toolchain_t current_toolchain;
+    
+    cb_plugin* plugins[CB_MAX_PLUGIN];
+    int plugin_count;
 };
 
 static cb_context default_ctx;
@@ -436,6 +478,60 @@ cb_log_debug(const char* fmt, ...) { va_list args; va_start(args, fmt); if (cb_d
 CB_INTERNAL void
 cb_log_important(const char* fmt, ...) { va_list args; va_start(args, fmt); cb_log_v(stdout, "", fmt, args); va_end(args); }
 
+/*-----------------------------------------------------------------------*/
+/* cb_file */
+/*-----------------------------------------------------------------------*/
+
+CB_INTERNAL
+FILE* cb_file_open(const char* path, const char* mode)
+{
+#ifdef WIN32
+	FILE* file = NULL;
+	if (fopen_s(&file, path, mode) != 0)
+#else
+	FILE* file = fopen(path, mode);
+	if (!file)
+#endif
+	{
+		cb_log_error("Could not open file '%s'\n", path);
+		return NULL;
+	}
+
+	return file;
+}
+
+CB_INTERNAL
+FILE* cb_file_open_readonly(const char* path)
+{
+#ifdef WIN32
+	const char* mode = "rb";
+#else
+	const char* mode = "r";
+#endif
+	return cb_file_open(path, mode);
+}
+
+CB_INTERNAL
+FILE* cb_file_open_readwrite(const char* path)
+{
+#ifdef WIN32
+	const char* mode = "wb+";
+#else
+	const char* mode = "w+";
+#endif
+	return cb_file_open(path, mode);
+}
+
+CB_INTERNAL cb_bool
+cb_file_close(FILE* file)
+{
+	if (fclose(file) != 0)
+	{
+		cb_log_error("Could not close file '%p'\n", file);
+		return cb_false;
+	}
+	return cb_true;
+}
 /*-----------------------------------------------------------------------*/
 /* temporary allocation */
 /*-----------------------------------------------------------------------*/
@@ -488,7 +584,7 @@ cb_tmp_strv_vprintf(const char* format, va_list args)
 
 	n = vsnprintf(NULL, 0, format, args);
 
-	sv.data = cb_tmp_alloc(n + 1);
+	sv.data = (char*)cb_tmp_alloc(n + 1);
 
 	vsnprintf((char*)sv.data, n + 1, format, args_copy);
 	sv.size = n;
@@ -505,6 +601,17 @@ cb_tmp_vsprintf(const char* format, va_list args)
 	return sv.data;
 }
 
+CB_INTERNAL cb_strv
+cb_tmp_strv_printf(const char* format, ...)
+{
+	va_list args;
+	cb_strv data = {0};
+	va_start(args, format);
+	data = cb_tmp_strv_vprintf(format, args);
+	va_end(args);
+	return data;
+}
+
 CB_INTERNAL const char*
 cb_tmp_sprintf(const char* format, ...)
 {
@@ -519,7 +626,7 @@ cb_tmp_sprintf(const char* format, ...)
 CB_INTERNAL const char*
 cb_tmp_strv_to_str(cb_strv sv)
 {
-	char* data = cb_tmp_alloc(sv.size + 1);
+	char* data = (char*)cb_tmp_alloc(sv.size + 1);
 	memcpy(data, sv.data, sv.size + 1);
 	data[sv.size] = '\0';
 	return data;
@@ -530,7 +637,7 @@ cb_tmp_str_to_strv(const char* str)
 {
 	cb_strv sv;
 	sv.size = strlen(str);
-	sv.data = cb_tmp_alloc(sv.size + 1);
+	sv.data = (char*)cb_tmp_alloc(sv.size + 1);
 	memcpy((char*)sv.data, str, sv.size + 1);
 	((char*)sv.data)[sv.size] = '\0';
 	return sv;
@@ -745,7 +852,7 @@ CB_INTERNAL cb_strv
 cb_strv_make(const char* data, cb_size size)
 {
 	cb_strv s;
-	s.data = data;
+	s.data = (char*)data;
 	s.size = size; 
 	return s;
 }
@@ -774,12 +881,67 @@ cb_lexicagraphical_cmp(const char* left, cb_size left_count, const char* right, 
 		: left_count > right_count ?  1 : -1;
 }
 
+
+
 CB_INTERNAL int cb_strv_compare(cb_strv sv, const char* data, cb_size size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
 CB_INTERNAL int cb_strv_compare_strv(cb_strv sv, cb_strv other) { return cb_strv_compare(sv, other.data, other.size); }
 CB_INTERNAL int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv, str, strlen(str)); }
 CB_INTERNAL cb_bool cb_strv_equals(cb_strv sv, const char* data, cb_size size) { return cb_strv_compare(sv, data, size) == 0; }
 CB_INTERNAL cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
 CB_INTERNAL cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
+
+CB_INTERNAL cb_bool
+cb_strv_ends_with(cb_strv left, cb_strv right)
+{
+	cb_strv sub = { 0 };
+	if (left.size < right.size)
+	{
+		return cb_false;
+	}
+
+	sub = cb_strv_make(left.data + (left.size - right.size), right.size);
+	return cb_strv_equals_strv(sub, right);
+}
+
+CB_INTERNAL cb_bool
+cb_strv_contains_str(cb_strv left, const char* right)
+{
+    for (cb_size i = 0; i < left.size; i += 1)
+    {
+        cb_size j = 0;
+
+        while (i + j < left.size && right[j] != '\0' && left.data[i + j] == right[j])
+        {
+            j += 1;
+        }
+
+        // If we reached the end of the needle, it's a match
+        if (right[j] == '\0')
+        {
+            return cb_true;
+        }
+    }
+
+    return cb_false;
+}
+
+cb_bool cb_strv_contains_strv(cb_strv left, cb_strv right)
+{
+    if (right.size == 0 || left.size < right.size)
+    {
+        return cb_false;
+    }
+
+    for (cb_size i = 0; i <= left.size - right.size; i += 0)
+    {
+        if (memcmp(left.data + i, right.data, right.size) == 0)
+        {
+            return cb_true;
+        }
+    }
+
+    return cb_false;
+}
 
 /*-----------------------------------------------------------------------*/
 /* cb_str - c string utilities */
@@ -1152,6 +1314,10 @@ cb_mmap_get_strv(cb_mmap* map, cb_strv key, cb_strv default_value)
 	return cb_mmap_get_from_kv(map, &key_item, &result) ? result.u.strv : default_value;
 }
 
+/*-----------------------------------------------------------------------*/
+/* context */
+/*-----------------------------------------------------------------------*/
+
 CB_INTERNAL void
 cb_context_init(cb_context* ctx)
 {
@@ -1163,8 +1329,19 @@ cb_context_init(cb_context* ctx)
 CB_INTERNAL void
 cb_context_destroy(cb_context* ctx)
 {
+    int i;
 	cb_mmap_destroy(&ctx->projects);
-	cb_context_init(ctx);
+
+    for(i = 0; i < ctx->plugin_count; i += 1)
+    {
+        cb_plugin* plugin = ctx->plugins[i];
+        if (plugin->destroy)
+        {
+            plugin->destroy(plugin);
+        }
+    }
+    
+    cb_context_init(ctx);
 }
 
 CB_INTERNAL void cb_project_destroy(cb_project_t* project);
@@ -1204,6 +1381,137 @@ cb_current_project(void)
 	if (!ctx) { return NULL; }
 	return ctx->current_project;
 }
+
+/*-----------------------------------------------------------------------*/
+/* plugins */
+/*-----------------------------------------------------------------------*/
+
+CB_API void 
+cb_init_with_plugins(cb_plugin* plugins[], int plugin_count)
+{
+    int i;
+    
+    CB_ASSERT(plugin_count > 0);
+    CB_ASSERT(plugin_count <= CB_MAX_PLUGIN);
+     
+    cb_init();
+    
+    printf("Plugin count A %d \n", plugin_count);
+    cb_context* ctx = cb_current_context();
+    
+    for(i = 0; i < plugin_count; i += 1)
+    {
+        ctx->plugins[i] = plugins[i];
+    }
+    ctx->plugin_count = plugin_count;
+    
+    printf("Plugin count B %d \n", ctx->plugin_count);
+}
+
+CB_INTERNAL void
+cb_plugins_register_file(cb_strv absolute_path)
+{
+    int i;
+    cb_context* ctx = cb_current_context();
+
+    printf("cb_plugins_register_file %d \n", ctx->plugin_count);
+ 
+    for(i = 0; i < ctx->plugin_count; i += 1)
+    {
+        cb_plugin* plugin = ctx->plugins[i];
+        
+        CB_ASSERT(plugin);
+        if (plugin->register_file)
+        {
+               printf("cb_plugins_register_file B %d \n", ctx->plugin_count);
+ 
+            plugin->register_file(plugin, absolute_path);
+        }
+    }
+}
+
+CB_INTERNAL void
+cb_plugins_bake_starting()
+{
+    int i;
+    cb_context* ctx = cb_current_context();
+    
+    for(i = 0; i < ctx->plugin_count; i += 1)
+    {
+        cb_plugin* plugin = ctx->plugins[i];
+        
+        CB_ASSERT(plugin);
+        if (plugin->bake_starting)
+        {
+            plugin->bake_starting(plugin);
+        }
+    }
+}
+
+CB_INTERNAL void
+cb_plugins_extra_argument(cb_dstr* cmd)
+{
+    int i;
+    cb_context* ctx = cb_current_context();
+    
+    printf("Plugin count  %d \n", ctx->plugin_count);
+     
+    for(i = 0; i < ctx->plugin_count; i += 1)
+    {
+        cb_plugin* plugin = ctx->plugins[i];
+        
+        CB_ASSERT(plugin);
+        if (plugin->extra_argument)
+        {
+            printf("PRE ARG \n");
+          
+            const char* arg = plugin->extra_argument(plugin);
+            printf("ARG %s \n",  arg);
+            cb_dstr_append_f(cmd, "%s ", arg);
+        }
+    }
+}
+
+CB_INTERNAL cb_bool
+cb_plugins_can_process_file(const char* file)
+{
+    int i;
+    cb_context* ctx = cb_current_context();
+    
+    for(i = 0; i < ctx->plugin_count; i += 1)
+    {
+        cb_plugin* plugin = ctx->plugins[i];
+        
+        CB_ASSERT(plugin);
+        
+        if (!plugin->can_process_file(plugin, file))
+        {
+            return cb_false;
+        }
+    }
+   
+   return cb_true;
+}
+
+CB_INTERNAL void
+cb_plugins_project_processed(const char* std_out, const char* std_err)
+{
+    int i;
+    cb_context* ctx = cb_current_context();
+     
+    for(i = 0; i < ctx->plugin_count; i += 1)
+    {
+        cb_plugin* plugin = ctx->plugins[i];
+       
+        CB_ASSERT(plugin);
+               
+        plugin->project_processed(plugin, std_out, std_err);
+    }
+}
+
+/*-----------------------------------------------------------------------*/
+/* misc. */
+/*-----------------------------------------------------------------------*/
 
 CB_INTERNAL cb_bool
 cb_try_find_project_by_name(cb_strv sv, cb_project_t** project)
@@ -1415,7 +1723,7 @@ cb_ensure_trailing_dir_separator(char* path, cb_size path_len)
 CB_INTERNAL char*
 cb_path_combine(const char* left, const char* right)
 {
-	char* result = cb_tmp_calloc(CB_MAX_PATH);
+	char* result = (char*)cb_tmp_calloc(CB_MAX_PATH);
 	cb_size n = 0;
 	n += cb_str_append_from(result, left, n, CB_MAX_PATH);
 	n += cb_ensure_trailing_dir_separator(result, strlen(result));
@@ -1746,6 +2054,43 @@ cb_delete_file(const char* src_path)
 	return result;
 }
 
+/*
+CB_INTERNAL cb_bool
+cb_delete_folder(const char* src_path)
+{
+	cb_bool result = 0;
+	cb_size tmp_index = cb_tmp_save();
+	cb_log_debug("Deleting folder '%s'.", src_path);
+#ifdef _WIN32
+	//result = RemoveDirectoryW(cb_utf8_to_utf16(src_path));
+    
+   //  std::vector<WCHAR> doubleTerminated(path.size() + 2);
+   // wcscpy_s(doubleTerminated.data(), doubleTerminated.size(), path.c_str());
+   // doubleTerminated[doubleTerminated.size() - 1] = L'\0';
+   // doubleTerminated[doubleTerminated.size() - 2] = L'\0';
+ 
+   // std::wstring progressTitle = L"Cleaning Folder";
+    SHFILEOPSTRUCT options = { 0 };
+    options.hwnd = NULL;
+    options.wFunc = FO_DELETE;
+    options.pFrom = cb_utf8_to_utf16(src_path);//doubleTerminated.data();
+    options.fFlags = FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT;
+    options.lpszProgressTitle = L"Cleaning Folder";//progressTitle.c_str();
+    cb_bool result = !!SHFileOperation(&options);
+    
+#else
+	result = remove(src_path) != -1;
+#endif
+	if (!result) {
+		cb_log_debug("Could not delete folder '%s'.", src_path);
+	}
+
+	cb_tmp_restore(tmp_index);
+
+	return result;
+}
+*/
+
 CB_INTERNAL cb_bool
 cb_move_file(const char* src_path, const char* dest_path)
 {
@@ -1822,6 +2167,8 @@ cb_destroy(void)
 {
 	cb_context_destroy(cb_current_context());
 	cb_tmp_reset();
+    
+    
 }
 
 CB_API void
@@ -2338,7 +2685,6 @@ cb_process_core(cb_process_handle* handle)
 
 			si.hStdOutput = process_stdout_write;
 		}
-
 		if (handle->stderr_to_string)
 		{
 			/* Create a pipe for the child process's stderr. */
@@ -2727,6 +3073,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	const char* linked_output_dir; /* to keep track of the .obj generated */
 	const char* path_prefix = NULL;
 	cb_project_t* project = NULL;
+    cb_context* ctx = cb_current_context();
 	cb_size tmp_index;
 	project = cb_find_project_by_name_str(project_name);
 
@@ -2748,6 +3095,10 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	/* Use /nologo to avoid undesirable messages in the command line. */
 	cb_dstr_append_f(&str, "%s.exe /utf-8 /nologo ", tc->program);
 
+    cb_plugins_bake_starting();
+            
+    cb_plugins_extra_argument(&str);
+    
 	/* Handle binary type */
 
 	cb_bool is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_EXE);
@@ -2761,7 +3112,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	}
 
 	if (is_static_library) {
-		cb_dstr_append_str(&str, "/c ");
+		cb_dstr_append_str(&str, "/c /FC ");
 	}
 	else if (is_shared_library) {
 		cb_dstr_append_str(&str, "/LD ");
@@ -2814,6 +3165,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
+    cb_bool at_least_one_source_file = cb_false;
 	/* Append files and .obj */
 	{
 		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
@@ -2822,13 +3174,22 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
 			tmp_index = cb_tmp_save();
 
-			cb_dstr_append_f(&str, "\"%s\" ", cb_path_get_absolute_file(current.u.strv.data));
+            const char* abs_file = cb_path_get_absolute_file(current.u.strv.data);
+            
+            if (cb_plugins_can_process_file(abs_file))
+            {
+                at_least_one_source_file = cb_true;
+                
+                cb_dstr_append_f(&str, "\"%s\" ", abs_file);
 
-			cb_tmp_restore(tmp_index);
+                cb_plugins_register_file(current.u.strv);
+                
+                cb_tmp_restore(tmp_index);
 
-			basename = cb_path_basename(current.u.strv);
+                basename = cb_path_basename(current.u.strv);
 
-			cb_dstr_append_f(&str_obj, "\"%.*s.obj\" ", basename.size, basename.data);
+                cb_dstr_append_f(&str_obj, "\"%.*s.obj\" ", basename.size, basename.data);
+            }
 		}
 	}
 
@@ -2912,10 +3273,40 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	}
 
 	/* execute cl.exe */
-	if (cb_process_in_directory(str.data, output_dir) != 0)
-	{
-		cb_set_and_goto(artefact, NULL, exit);
-	}
+    
+    printf("DEBUG CMD: %s \n", str.data);
+    if (at_least_one_source_file)
+    {
+        // When plugins are used we capture the standard outputs which might be processed by one of the plugin.
+        if (ctx->plugin_count > 0)
+        {
+            cb_bool also_stderr = cb_true;
+            cb_process_handle* process_handle = cb_process_to_string(str.data, output_dir, also_stderr);
+
+            if (process_handle == 0)
+            {
+                cb_set_and_goto(artefact, NULL, exit);
+            }
+            
+            const char* std_out = cb_process_stdout_string(process_handle);
+            const char* std_err = cb_process_stderr_string(process_handle);
+       
+            cb_plugins_project_processed(std_out, std_err);
+            
+            if (cb_process_end(process_handle) != 0)
+            {
+                cb_set_and_goto(artefact, NULL, exit);
+            }
+        }
+        else
+        {
+            if (cb_process_in_directory(str.data, output_dir) != 0)
+            {
+                cb_set_and_goto(artefact, NULL, exit);
+            }
+        }
+    }
+	
 	
 	if (is_static_library)
 	{
@@ -2942,19 +3333,6 @@ exit:
 /* ================================================================ */
 
 /* #gcc #toolchain */
-
-CB_INTERNAL cb_bool
-cb_strv_ends_with(cb_strv sv, cb_strv rhs)
-{
-	cb_strv sub = { 0 };
-	if (sv.size < rhs.size)
-	{
-		return cb_false;
-	}
-
-	sub = cb_strv_make(sv.data + (sv.size - rhs.size), rhs.size);
-	return cb_strv_equals_strv(sub, rhs);
-}
 
 CB_API const char*
 cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)

@@ -1,3 +1,9 @@
+/*
+
+  @TODO example of use.
+
+*/
+
 #ifndef CB_FILE_IT_H
 #define CB_FILE_IT_H
 

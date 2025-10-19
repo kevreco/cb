@@ -1,3 +1,21 @@
+/*
+    // Example of us:
+    
+    void main() {
+        cb_file_it it;
+        
+        cb_file_it_init_recursive(&it, "/src/file_*.c");
+        
+        while(cb_file_it_get_next(&it))
+        {
+            const char* file = cb_file_it_current_file(&it);
+            printf("file: %s", file);
+        }
+        
+        cb_file_it_destroy(&it);
+    }
+*/
+
 #ifndef CB_FILE_IT_H
 #define CB_FILE_IT_H
 
@@ -57,6 +75,9 @@ CB_API cb_bool cb_file_it_get_next(cb_file_it* it);
 #endif /* CB_FILE_IT_H */
 
 #ifdef CB_IMPLEMENTATION
+
+#ifndef CB_FILE_IT_IMPL
+#define CB_FILE_IT_IMPL
 
 CB_INTERNAL void
 cb_file_it__push_dir(cb_file_it* it, const char* directory)
@@ -224,7 +245,11 @@ cb_file_it_get_next(cb_file_it* it)
 	cb_bool is_directory = cb_false;
 	const char* found = 0;
 
-	CB_ASSERT(it->has_next);
+    /* On the first iteration has_next could be false if there was no file to iterate at all. */
+	if (!it->has_next)
+	{
+		return cb_false;
+	}
 
 	do
 	{
@@ -263,5 +288,7 @@ cb_file_it_get_next(cb_file_it* it)
 
 	return cb_true;
 }
+
+#endif /* CB_FILE_IT_IMPL */
 
 #endif /* CB_IMPLEMENTATION */

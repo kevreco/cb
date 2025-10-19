@@ -18,6 +18,9 @@ CB_API cb_bool cb_copy_directory(const char* source_dir, const char* target_dir)
 
 #ifdef CB_IMPLEMENTATION
 
+#ifndef CB_COPY_DIRECTORY_IMPL
+#define CB_COPY_DIRECTORY_IMPL
+
 CB_API cb_bool
 cb_copy_directory(const char* source_dir, const char* target_dir)
 {
@@ -54,5 +57,7 @@ exit:
 	cb_tmp_restore(tmp_save);
 	return result;
 }
+
+#endif /* CB_COPY_DIRECTORY_IMPL */
 
 #endif /* CB_IMPLEMENTATION */

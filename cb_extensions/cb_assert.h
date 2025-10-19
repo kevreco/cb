@@ -30,7 +30,7 @@ extern "C" {
 	do { \
 		int result = (expression); \
 		if (result == 0) { \
-			cb_log_error("Expression is not true : %s %d", __FILE__, __LINE__); \
+			cb_log_error("Expression is not true : %s:%d", __FILE__, __LINE__); \
 			exit(1); \
 		} \
 	} while (0);
@@ -55,6 +55,9 @@ CB_API void cb_assert_file_exists_f(const char* format, ...);
 
 #ifdef CB_IMPLEMENTATION
 
+#ifndef CB_ASSERT_IMPL
+#define CB_ASSERT_IMPL
+
 CB_API void
 cb_assert_file_exists(const char* filepath)
 {
@@ -77,5 +80,7 @@ cb_assert_file_exists_f(const char* format, ...)
 
 	va_end(args);
 }
+
+#endif /* CB_ASSERT_IMPL */
 
 #endif /* CB_IMPLEMENTATION */

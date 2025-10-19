@@ -32,12 +32,17 @@ cb_add_files_recursive(const char* directory, const char* pattern);
 
 #ifdef CB_IMPLEMENTATION
 
-/* ================================================================ */
-/* WILDMATCH_H */
-/* Taken from https://github.com/ujr/wildmatch - UNLICENSED
-*  - 'cb_decode_utf8' was named 'decode'
-*  - 'cb_wildmatch' was created from 'match1'
-/* ================================================================ */
+#ifndef CB_ADD_FILES_IMPL
+#define CB_ADD_FILES_IMPL
+
+/*
+================================================================
+WILDMATCH_H 
+Taken from https://github.com/ujr/wildmatch - UNLICENSED
+  - 'cb_decode_utf8' was named 'decode'
+  - 'cb_wildmatch' was created from 'match1'
+================================================================
+*/
 
 /** return nbytes, 0 on end, -1 on error */
 CB_INTERNAL int
@@ -162,5 +167,7 @@ cb_add_files_recursive(const char* directory, const char* pattern)
 		cb_add(cb_FILES, filepath);
 	}
 }
+
+#endif /* CB_ADD_FILES_IMPL */
 
 #endif /* CB_IMPLEMENTATION */

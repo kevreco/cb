@@ -26,6 +26,9 @@ CB_API void cb_dump(void);
 
 #ifdef CB_IMPLEMENTATION
 
+#ifndef CB_DUMP_IMPL
+#define CB_DUMP_IMPL
+
 CB_API const char*
 cb_dump_to_str(void)
 {
@@ -71,5 +74,7 @@ cb_dump(void)
 {
     fprintf(stdout, "%s", cb_dump_to_str());
 }
+
+#endif /* CB_DUMP_IMPL */
 
 #endif /* CB_IMPLEMENTATION */

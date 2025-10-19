@@ -3,3 +3,6 @@
 
 cb.bin
 cb.exe
+.build/**/*.o
+.build/**/*.d
+.build/**/*.obj

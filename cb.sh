@@ -40,7 +40,7 @@ if [ -f "$cb_output" ]; then
    rm "$cb_output"
 fi
 
-if [ -v cb_gcc ] && [ -v cb_pedantic ]; then cb_cxflags="-std=c89 -pedantic -Werror -Wextra" ; fi
+if [ -v cb_gcc ] && [ -v cb_pedantic ]; then cb_cxflags="-std=gnu89 -Wall -Wextra -Werror -Werror=declaration-after-statement -Wno-unused-function" ; fi
 
 # Check if there is a value in cb_gcc.
 if [ -v cb_gcc ]; then

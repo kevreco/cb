@@ -77,6 +77,8 @@
 #define cb_true ((cb_bool)1)
 #define cb_false ((cb_bool)0)
 
+#define CB_UNUSED(x) ((void)x)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -85,10 +87,34 @@ typedef signed char cb_i8;
 typedef unsigned char cb_u8;
 typedef short  cb_i16;
 typedef unsigned short cb_u16;
-typedef int  cb_i32;
-typedef unsigned cb_u32;
-typedef long long  cb_i64;
-typedef unsigned long long cb_u64;
+
+#if defined(_MSC_VER)
+    typedef __int32 cb_i32;
+    typedef unsigned __int32 cb_u32;
+#elif defined(__GNUC__) || defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+    typedef int cb_i32;
+    typedef unsigned int cb_u32;
+#else
+    /* No 32-bit integer type available */
+    #error "Cannot define cb_u32 on this platform in pure C89"
+#endif
+
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
+    #include <stdint.h>
+    typedef int64_t cb_i64;
+    typedef uint64_t cb_u64;
+/* Microsoft Visual C++ __int64 */
+#elif defined(_MSC_VER)
+    typedef __int64 cb_i64;
+    typedef unsigned __int64 cb_u64;
+/* GCC/Clang support unsigned long long (even in C89 mode) */
+#elif defined(__GNUC__) || defined(__clang__)
+  typedef long long      cb_i64;
+  typedef unsigned long long      cb_u64;
+/* No known 64-bit type: fallback using struct */
+#else
+  #error "Cannot define cb_u64 on this platform in pure C89"
+#endif
 
 #define CB_U64_FMT "%llu"
 
@@ -246,21 +272,38 @@ CB_API void cb_init_with_plugins(cb_plugin** plugins, int plugin_count);
 
 /* Commonly used properties (basically to make it discoverable with auto completion and avoid misspelling) */
 
-/* keys */
-extern const char* cb_BINARY_TYPE;         /* Exe, shared_lib or static_lib. */
-extern const char* cb_CXFLAGS;             /* Extra flags to give to the C/C++ compiler. */
-extern const char* cb_DEFINES;             /* Define preprocessing symbol. */
-extern const char* cb_FILES;               /* Files to consume (could be .c, .cpp, etc.). */
-extern const char* cb_INCLUDE_DIRECTORIES; /* Include directories. */
-extern const char* cb_LINK_PROJECTS;       /* Other projects to link. */
-extern const char* cb_LIBRARIES;           /* Libraries to link with. */
-extern const char* cb_LFLAGS;              /* Extra flags to give to the linker. */
-extern const char* cb_OUTPUT_DIR;          /* Ouput directory for the generated files. */
-extern const char* cb_TARGET_NAME;         /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
+
+const char* cb_BINARY_TYPE = "binary_type";
+const char* cb_CXFLAGS = "cxflags";
+const char* cb_DEFINES = "defines";
+const char* cb_FILES = "files";
+const char* cb_INCLUDE_DIRECTORIES = "include_directories";
+const char* cb_LINK_PROJECTS = "link_projects";
+const char* cb_LIBRARIES = "libraries";
+const char* cb_LFLAGS = "lflags";
+const char* cb_OUTPUT_DIR = "output_dir";
+const char* cb_TARGET_NAME = "target_name";
+const char* cb_WORKING_DIRECTORY = "working_directory";
 /* values */
-extern const char* cb_EXE;                 /* cb_BINARY_TYPE value */
-extern const char* cb_SHARED_LIBRARY;      /* cb_BINARY_TYPE value */
-extern const char* cb_STATIC_LIBRARY;      /* cb_BINARY_TYPE value */
+const char* cb_EXE = "exe";
+const char* cb_SHARED_LIBRARY = "shared_library";
+const char* cb_STATIC_LIBRARY = "static_library";
+
+/* keys */
+#define cb_BINARY_TYPE "binary_type"     /* Exe, shared_lib or static_lib. */
+#define cb_CXFLAGS "cxflags"             /* Extra flags to give to the C/C++ compiler. */
+#define cb_DEFINES "defines"             /* Define preprocessing symbol. */
+#define cb_FILES "files"                 /* Files to consume (could be .c, .cpp, etc.). */
+#define cb_INCLUDE_DIRECTORIES "include_directories" /* Include directories. */
+#define cb_LINK_PROJECTS "link_projects" /* Other projects to link. */
+#define cb_LIBRARIES "libraries"         /* Libraries to link with. */
+#define cb_LFLAGS "lflags"               /* Extra flags to give to the linker. */
+#define cb_OUTPUT_DIR "output_dir"       /* Ouput directory for the generated files. */
+#define cb_TARGET_NAME "target_name"     /* Name (basename) of the main generated file (.exe, .a, .lib, .dll, etc.). */
+/* values */
+#define cb_EXE "exe"                       /* cb_BINARY_TYPE value */
+#define cb_SHARED_LIBRARY "shared_library" /* cb_BINARY_TYPE value */
+#define cb_STATIC_LIBRARY "static_library" /* cb_BINARY_TYPE value */
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -304,21 +347,6 @@ extern const char* cb_STATIC_LIBRARY;      /* cb_BINARY_TYPE value */
 */
 
 /* keys */
-const char* cb_BINARY_TYPE = "binary_type";
-const char* cb_CXFLAGS = "cxflags";
-const char* cb_DEFINES = "defines";
-const char* cb_FILES = "files";
-const char* cb_INCLUDE_DIRECTORIES = "include_directories";
-const char* cb_LINK_PROJECTS = "link_projects";
-const char* cb_LIBRARIES = "libraries";
-const char* cb_LFLAGS = "lflags";
-const char* cb_OUTPUT_DIR = "output_dir";
-const char* cb_TARGET_NAME = "target_name";
-const char* cb_WORKING_DIRECTORY = "working_directory";
-/* values */
-const char* cb_EXE = "exe";
-const char* cb_SHARED_LIBRARY = "shared_library";
-const char* cb_STATIC_LIBRARY = "static_library";
 
 /* string view */
 struct cb_strv {
@@ -493,7 +521,7 @@ FILE* cb_file_open(const char* path, const char* mode)
 	if (!file)
 #endif
 	{
-		cb_log_error("Could not open file '%s'\n", path);
+		cb_log_error("cb_file_open: could not open file '%s' (%s)\n", path, mode);
 		return NULL;
 	}
 
@@ -512,12 +540,14 @@ FILE* cb_file_open_readonly(const char* path)
 }
 
 CB_INTERNAL
+/* @TODO rename this to cb_file_open_write */
+
 FILE* cb_file_open_readwrite(const char* path)
 {
 #ifdef WIN32
-	const char* mode = "wb+";
+	const char* mode = "wb";
 #else
-	const char* mode = "w+";
+	const char* mode = "w";
 #endif
 	return cb_file_open(path, mode);
 }
@@ -527,7 +557,7 @@ cb_file_close(FILE* file)
 {
 	if (fclose(file) != 0)
 	{
-		cb_log_error("Could not close file '%p'\n", file);
+		cb_log_error("could not close file '%p'\n");
 		return cb_false;
 	}
 	return cb_true;
@@ -537,27 +567,36 @@ cb_file_close(FILE* file)
 /*-----------------------------------------------------------------------*/
 
 #ifndef CB_TMP_CAPACITY
-#define CB_TMP_CAPACITY (8 * 1024 * 1024) /* Arbitrary size. Must be big enough. Can be increased if needed. */
+/* Arbitrary size. Must be big enough. Can be increased if needed. */
+#define CB_TMP_CAPACITY (4 * 1024 * 1024) 
 #endif
 
 static CB_THREAD cb_size cb_tmp_size = 0;
 static CB_THREAD char cb_tmp_buffer[CB_TMP_CAPACITY] = { 0 };
 
+#ifndef CB_TMP_ALIGNMENT
+#define CB_TMP_ALIGNMENT 16
+#endif
+
 CB_INTERNAL void*
 cb_tmp_alloc(cb_size size)
 {
-	void* data = NULL;
+    void* data = NULL;
 
-	CB_ASSERT((cb_tmp_size + size <= CB_TMP_CAPACITY) && "Size of the temporary allocator is too small. Increase it if needed.");
+   // Align the current offset to the specified alignment (must be power of 2)
+    size_t aligned_offset = (cb_tmp_size + (CB_TMP_ALIGNMENT - 1)) & ~((size_t)(CB_TMP_ALIGNMENT - 1));
 
-	if (cb_tmp_size + size > CB_TMP_CAPACITY)
-	{
-		return NULL;
-	}
+    CB_ASSERT((aligned_offset + size <= CB_TMP_CAPACITY) &&
+              "Size of the temporary allocator is too small. Increase it if needed.");
 
-	data = &cb_tmp_buffer[cb_tmp_size];
-	cb_tmp_size += size;
-	return data;
+    if (aligned_offset + size > CB_TMP_CAPACITY)
+    {
+        return NULL;
+    }
+
+    data = &cb_tmp_buffer[aligned_offset];
+    cb_tmp_size = aligned_offset + size;
+    return data;
 }
 
 CB_INTERNAL void*
@@ -906,7 +945,9 @@ cb_strv_ends_with(cb_strv left, cb_strv right)
 CB_INTERNAL cb_bool
 cb_strv_contains_str(cb_strv left, const char* right)
 {
-    for (cb_size i = 0; i < left.size; i += 1)
+    cb_size i = 0;
+    
+    for (i = 0; i < left.size; i += 1)
     {
         cb_size j = 0;
 
@@ -927,12 +968,14 @@ cb_strv_contains_str(cb_strv left, const char* right)
 
 cb_bool cb_strv_contains_strv(cb_strv left, cb_strv right)
 {
+    cb_size i;
+    
     if (right.size == 0 || left.size < right.size)
     {
         return cb_false;
     }
 
-    for (cb_size i = 0; i <= left.size - right.size; i += 0)
+    for (i = 0; i <= left.size - right.size; i += 0)
     {
         if (memcmp(left.data + i, right.data, right.size) == 0)
         {
@@ -1389,23 +1432,22 @@ cb_current_project(void)
 CB_API void 
 cb_init_with_plugins(cb_plugin* plugins[], int plugin_count)
 {
-    int i;
+    cb_context* ctx = NULL;
+    int i = 0;
     
     CB_ASSERT(plugin_count > 0);
     CB_ASSERT(plugin_count <= CB_MAX_PLUGIN);
      
     cb_init();
-    
-    printf("Plugin count A %d \n", plugin_count);
-    cb_context* ctx = cb_current_context();
+
+    ctx = cb_current_context();
     
     for(i = 0; i < plugin_count; i += 1)
     {
         ctx->plugins[i] = plugins[i];
     }
-    ctx->plugin_count = plugin_count;
     
-    printf("Plugin count B %d \n", ctx->plugin_count);
+    ctx->plugin_count = plugin_count;
 }
 
 CB_INTERNAL void
@@ -1451,8 +1493,10 @@ cb_plugins_bake_starting()
 CB_INTERNAL void
 cb_plugins_extra_argument(cb_dstr* cmd)
 {
-    int i;
-    cb_context* ctx = cb_current_context();
+    cb_context* ctx = NULL;
+    int i = 0;
+    
+    ctx = cb_current_context();
     
     printf("Plugin count  %d \n", ctx->plugin_count);
      
@@ -1463,10 +1507,7 @@ cb_plugins_extra_argument(cb_dstr* cmd)
         CB_ASSERT(plugin);
         if (plugin->extra_argument)
         {
-            printf("PRE ARG \n");
-          
             const char* arg = plugin->extra_argument(plugin);
-            printf("ARG %s \n",  arg);
             cb_dstr_append_f(cmd, "%s ", arg);
         }
     }
@@ -1961,7 +2002,7 @@ cb_copy_file(const char* src_path, const char* dest_path)
 	src_fd = open(src_path, O_RDONLY);
 	if (src_fd < 0)
 	{
-		cb_log_error("Could not open file '%s': %s", src_path, strerror(errno));
+		cb_log_error("cb_copy_file: could not open file '%s': %s", src_path, strerror(errno));
 		return cb_false;
 	}
 	
@@ -1976,7 +2017,7 @@ cb_copy_file(const char* src_path, const char* dest_path)
 
 	if (dst_fd < 0)
 	{
-        cb_log_error("Could not open file '%s': %s", dest_path, strerror(errno));
+        cb_log_error("cb_copy_file: could not open file '%s': %s", dest_path, strerror(errno));
 		close(src_fd);
 		return cb_false;
 	}
@@ -2806,7 +2847,7 @@ a"b"c   => 1 argument a"b"c
 CB_INTERNAL const char*
 cb_get_next_arg(const char* str, cb_strv* sv)
 {
-	sv->data = str;
+	sv->data = (char*)str;
 	sv->size = 0;
 	if (str == NULL || *str == '\0')
 		return NULL;
@@ -2838,7 +2879,7 @@ cb_get_next_arg(const char* str, cb_strv* sv)
 				continue;
 			}
 
-			sv->data = str; /* The next argument will begin right after the quote */
+			sv->data = (char*)str; /* The next argument will begin right after the quote */
 			/* Skip everything until the next unescaped quote */
 			while (*str != '\0' && !cb_is_end_of_quote(str, *quote))
 				str += 1;
@@ -2858,7 +2899,7 @@ cb_get_next_arg(const char* str, cb_strv* sv)
 			while (*str != '\0' && !cb_is_space(*str))
 				str += 1;
 
-			sv->data = ch; /* remove quote */
+			sv->data = (char*)ch; /* remove quote */
 			sv->size = str - ch;
 			return str;
 		}
@@ -3073,8 +3114,15 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	const char* linked_output_dir; /* to keep track of the .obj generated */
 	const char* path_prefix = NULL;
 	cb_project_t* project = NULL;
+    const char* std_out = NULL;
+    const char* std_err = NULL;
     cb_context* ctx = cb_current_context();
+    
+    
 	cb_size tmp_index;
+
+	cb_bool at_least_one_source_file = cb_false;
+
 	project = cb_find_project_by_name_str(project_name);
 
 	if (!project)
@@ -3165,7 +3213,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
-    cb_bool at_least_one_source_file = cb_false;
+    
 	/* Append files and .obj */
 	{
 		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
@@ -3272,12 +3320,12 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
-	/* execute cl.exe */
+	/* Execute cl.exe */
     
     printf("DEBUG CMD: %s \n", str.data);
     if (at_least_one_source_file)
     {
-        // When plugins are used we capture the standard outputs which might be processed by one of the plugin.
+        /* When plugins are used we capture the standard outputs which might be processed by one of the plugin. */
         if (ctx->plugin_count > 0)
         {
             cb_bool also_stderr = cb_true;
@@ -3288,8 +3336,8 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                 cb_set_and_goto(artefact, NULL, exit);
             }
             
-            const char* std_out = cb_process_stdout_string(process_handle);
-            const char* std_err = cb_process_stderr_string(process_handle);
+            std_out = cb_process_stdout_string(process_handle);
+            std_err = cb_process_stderr_string(process_handle);
        
             cb_plugins_project_processed(std_out, std_err);
             
@@ -3300,6 +3348,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
         }
         else
         {
+            
             if (cb_process_in_directory(str.data, output_dir) != 0)
             {
                 cb_set_and_goto(artefact, NULL, exit);
@@ -3307,7 +3356,8 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
         }
     }
 	
-	
+	/* Execute lib.exe */
+    
 	if (is_static_library)
 	{
 		/* lib.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
@@ -3357,15 +3407,22 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	const char* linked_output_dir;
 	cb_strv linked_project_name = { 0 };
 	cb_project_t* linked_project = NULL;
-	const char* tmp; /* Temp string */
-	const char* current_object = NULL;
-	cb_size i = 0;
+	const char* tmp = NULL; /* Temp string */
 	const char* _ = "  ";        /* Space to separate command arguments */
 	cb_size tmp_index = 0;           /* to save temporary allocation index */
 	const char* artefact = NULL; /* Resulting artifact path */
 
 	cb_project_t* project = NULL;
-	
+    /*cb_context* ctx = cb_current_context();*/
+
+    cb_bool at_least_one_source_file = cb_false;
+
+	/*const char* std_out = NULL;   @TODO comment this. */
+    /*const char* std_err = NULL;   @TODO comment this. */
+    const char* abs_file = NULL;   /*@TODO comment this. */
+    
+    cb_plugins_bake_starting();
+    
 	project = cb_find_project_by_name_str(project_name);
 	
 	if (!project)
@@ -3380,7 +3437,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	cb_dstr_init(&str_obj);
 
 	cb_darrT_init(&objects);
-
+    
 	/* Get and format output directory */
 	output_dir = cb_get_output_directory(project, tc);
 
@@ -3390,6 +3447,9 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	/* Start command */
 	cb_dstr_append_f(&str, "%s ", tc->program);
 
+    /* Append extra flags depending on the plugin used */
+    cb_plugins_extra_argument(&str);
+    
 	/* Handle binary type */
 	is_exe = cb_property_equals(project, cb_BINARY_TYPE, cb_EXE);
 	is_shared_library = cb_property_equals(project, cb_BINARY_TYPE, cb_SHARED_LIBRARY);
@@ -3459,22 +3519,44 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
 		while (cb_mmap_range_get_next(&range, &current))
 		{
-			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
+            /* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
 			tmp_index = cb_tmp_save();
-			/* add .c files */
-			cb_dstr_append_f(&str, "\"%s\" ", cb_path_get_absolute_file(current.u.strv.data));
-			cb_tmp_restore(tmp_index);
-			
-			basename = cb_path_basename(current.u.strv);
 
-			if (is_exe || is_static_library)
-			{
-				/* output/dir/my_object.o */
-				cb_dstr_append_f(&str_obj, "\"%s%.*s.o\" ", output_dir, basename.size, basename.data);
+            abs_file = cb_path_get_absolute_file(current.u.strv.data);
+            
+            if (cb_plugins_can_process_file(abs_file))
+            {
+                /*
+                at_least_one_source_file = cb_true;
+                
+                cb_dstr_append_f(&str, "\"%s\" ", abs_file);
 
-				/* my_object.o */
-				cb_darrT_push_back(&objects, cb_tmp_sprintf("%.*s.o", basename.size, basename.data));
-			}
+                cb_plugins_register_file(current.u.strv);
+                
+                cb_tmp_restore(tmp_index);
+
+                basename = cb_path_basename(current.u.strv);
+
+                cb_dstr_append_f(&str_obj, "\"%.*s.obj\" ", basename.size, basename.data);
+                */
+                
+                at_least_one_source_file = cb_true;
+
+                /* add .c files */
+                cb_dstr_append_f(&str, "\"%s\" ", abs_file);
+                cb_tmp_restore(tmp_index);
+                
+                basename = cb_path_basename(current.u.strv);
+
+                if (is_exe || is_static_library)
+                {
+                    /* output/dir/my_object.o */
+                    cb_dstr_append_f(&str_obj, "\"%s%.*s.o\" ", output_dir, basename.size, basename.data);
+
+                    /* my_object.o */
+                    cb_darrT_push_back(&objects, cb_tmp_sprintf("%.*s.o", basename.size, basename.data));
+                }
+            }
 		}
 	}
 
@@ -3501,7 +3583,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 			}
 		}
 
-		/* Give some parameters to the linker to  look for the shared library next to the binary being built */
+		/* Give some parameters to the linker to look for the shared library next to the binary being built */
 		cb_dstr_append_str(&str, " -Wl,-rpath,$ORIGIN ");
 
 		while (cb_mmap_range_get_next(&range, &current))
@@ -3538,11 +3620,21 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
-	/* Example: gcc <includes> -c  <c source files> */
-	if (cb_process_in_directory(str.data, output_dir) != 0)
-	{
-		cb_set_and_goto(artefact, NULL, exit);
-	}
+    /* Execute gcc */
+    /* Example: gcc <includes> -c  <c source files> */
+    
+    if (at_least_one_source_file)
+    {
+        //strcpy(str.data, "ls");
+       cb_log_important("IMPORTANT: %s", str.data);
+        if (cb_process_in_directory(str.data, output_dir) != 0)
+        {
+            cb_set_and_goto(artefact, NULL, exit);
+        }
+       
+    }
+    
+    /* Execute ar */
 
 	if (is_static_library || is_shared_library)
 	{
@@ -3551,6 +3643,8 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 			/* Create libXXX.a in the output directory */
 			/* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
 			tmp = cb_tmp_sprintf("ar -crs \"%s\" %s ", artefact, str_obj.data);
+            
+            cb_log_important("IMPORTANT2: %s", tmp);
 			if (cb_process_in_directory(tmp, output_dir) != 0)
 			{
 				cb_set_and_goto(artefact, NULL, exit);

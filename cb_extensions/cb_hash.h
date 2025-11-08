@@ -1,21 +1,47 @@
 #ifndef CB_HASH_H
 #define CB_HASH_H
 
-/* @TODO use CB_INTERNAL instead of static inline */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+CB_API cb_u64 cb_hash_64(char* str, int size);
+CB_API cb_u64 cb_hash_64_init();
+CB_API cb_u64 cb_hash_64_combine(cb_u64 value, char* str, int size);
+CB_API cb_u64 cb_hash_64_str(char* str);
+
+#ifdef WIN32
+CB_API cb_bool cb_hash_64_file(HANDLE hFile, cb_u64* hash);
+#endif
+
+CB_API cb_bool cb_hash_64_from_filename(const char* filename, cb_u64* hash);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* CB_HASH_H */
+
+#ifdef CB_IMPLEMENTATION
+
+#define CB_FNV1A_64_SEED 14695981039346656037ULL
+#define CB_FNV1A_64_PRIME 1099511628211ULL
 
 #define CB_FNV1A_32_SEED 2166136261U
 #define CB_FNV1A_32_PRIME 16777619U
 
 typedef cb_u32 cb_fnv1a_32;
+typedef cb_u64 cb_fnv1a_64;
 
-static inline cb_fnv1a_32 fnv1a_32_make()
+CB_INTERNAL cb_fnv1a_32 fnv1a_32_make()
 {
     return CB_FNV1A_32_SEED;
 }
 
-static inline cb_fnv1a_32 fnv1a_32_update(cb_fnv1a_32 state, char* data, int size)
+CB_INTERNAL cb_fnv1a_32 fnv1a_32_update(cb_fnv1a_32 state, char* data, int size)
 {
-    for (int i = 0; i < size; ++i)
+    int i = 0;
+    for (i = 0; i < size; i += 1)
     {
         state = (state ^ data[i]) * CB_FNV1A_32_PRIME;
     }
@@ -23,7 +49,7 @@ static inline cb_fnv1a_32 fnv1a_32_update(cb_fnv1a_32 state, char* data, int siz
 }
 
 /* Take a null-terminated string */
-static inline cb_fnv1a_32 cb_fnv1a_32_update_str(cb_fnv1a_32 state, char* data)
+CB_INTERNAL cb_fnv1a_32 cb_fnv1a_32_update_str(cb_fnv1a_32 state, char* data)
 {
     while (*data)
     {
@@ -32,27 +58,23 @@ static inline cb_fnv1a_32 cb_fnv1a_32_update_str(cb_fnv1a_32 state, char* data)
     }
     return state;
 }
-            
-#define CB_FNV1A_64_SEED 14695981039346656037ULL
-#define CB_FNV1A_64_PRIME 1099511628211ULL
-
-typedef cb_u64 cb_fnv1a_64;
      
-static inline cb_fnv1a_64 cb_fnv1a_64_make()
+CB_INTERNAL cb_fnv1a_64 cb_fnv1a_64_make()
 {
     return CB_FNV1A_64_SEED;
 }
             
-static inline cb_fnv1a_64 cb_fnv1a_64_update(cb_fnv1a_64 state, char* data, int size)
+CB_INTERNAL cb_fnv1a_64 cb_fnv1a_64_update(cb_fnv1a_64 state, char* data, int size)
 {
-    for (int i = 0; i < size; ++i)
+    int i = 0;
+    for (i = 0; i < size; i += 1)
     {
         state = (state ^ data[i]) * CB_FNV1A_64_PRIME;
     }
     return state;
 }
 
-static inline cb_fnv1a_64 cb_fnv1a_64_update_str(cb_fnv1a_64 state, char* data)
+CB_INTERNAL cb_fnv1a_64 cb_fnv1a_64_update_str(cb_fnv1a_64 state, char* data)
 {
     while (*data)
     {
@@ -62,22 +84,41 @@ static inline cb_fnv1a_64 cb_fnv1a_64_update_str(cb_fnv1a_64 state, char* data)
     return state;
 }
 
-static inline cb_u64 cb_hash_64(char* str, int size)
+/*-----------------------------------------------------------------------*/
+/* API implementation */
+/*-----------------------------------------------------------------------*/
+
+CB_API cb_u64 cb_hash_64(char* str, int size)
 {
     return cb_fnv1a_64_update(cb_fnv1a_64_make(), str, size);
 }
 
-static inline cb_u64 cb_hash_64_str(char* str)
+CB_API cb_u64 cb_hash_64_init()
+{
+    return cb_fnv1a_64_make();
+}
+
+CB_API cb_u64 cb_hash_64_combine(cb_u64 value, char* str, int size)
+{
+    return cb_fnv1a_64_update(value, str, size);
+}
+
+CB_API cb_u64 cb_hash_64_str(char* str)
 {
     return cb_fnv1a_64_update_str(cb_fnv1a_64_make(), str);
 }
 
 #ifdef WIN32
-static inline cb_bool cb_hash_64_file(HANDLE hFile, char* buffer, cb_u32 buffer_size, cb_u64* hash)
+
+CB_API cb_bool cb_hash_64_file(HANDLE hFile, cb_u64* hash)
 {
     DWORD bytesRead;
     
     cb_fnv1a_64 state = cb_fnv1a_64_make();
+    
+    cb_u32 buffer_size = 16 * 4096;
+    char* buffer = cb_tmp_alloc(buffer_size);
+    
     do
     {
         if (!ReadFile(hFile, buffer, buffer_size, &bytesRead, NULL))
@@ -96,30 +137,35 @@ static inline cb_bool cb_hash_64_file(HANDLE hFile, char* buffer, cb_u32 buffer_
     
     return cb_true;
 }
-#else
-static inline  cb_hash_64_from_filename(char* filename, cb_u64* hash)
-{
-	const char* read_only_mode = "r";
 
-	FILE* file = fopen(filename, read_only_mode);
+#endif
+
+CB_API cb_bool cb_hash_64_from_filename(const char* filename, cb_u64* hash)
+{
+    cb_fnv1a_64 state = {0};
+    size_t count = 0;
+    cb_u32 buffer_size = 16 * 4096;
+    char* buffer = NULL;
+      
+	FILE* file = cb_file_open_readonly(filename);
 	if (!file)
 	{
-		fprintf(stderr, "cb_hash_64_from_filename: could not open file '%s'\n", filename);
+		cb_log_error("cb_hash_64_from_filename: could not open file '%s'\n", filename);
 		return 0;
 	}
     
-    cb_fnv1a_64 state = cb_fnv1a_64_make();
-
-    size_t count;
-
-    while ((count = fread(buffer, 1, buffer_size, f)) != 0)
+    state = cb_fnv1a_64_make();
+    
+    buffer = cb_tmp_alloc(buffer_size);
+ 
+    while ((count = fread(buffer, 1, buffer_size, file)) != 0)
     {
         state = cb_fnv1a_64_update(state, buffer, (int)count);
     }
 
     *hash = state;
     
-    if (!feof(fp))
+    if (!feof(file))
     {
         fclose(file);
         return  cb_false;
@@ -129,8 +175,5 @@ static inline  cb_hash_64_from_filename(char* filename, cb_u64* hash)
     
     return cb_true;
 }
-#endif
 
-
-
-#endif /* CB_HASH_H */
+#endif /* CB_IMPLEMENTATION */

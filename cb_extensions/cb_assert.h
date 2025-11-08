@@ -30,7 +30,7 @@ extern "C" {
 	do { \
 		int result = (expression); \
 		if (result == 0) { \
-			cb_log_error("Expression is not true : %s %d", __FILE__, __LINE__); \
+			cb_log_error("Expression is not true : %s:%d", __FILE__, __LINE__); \
 			exit(1); \
 		} \
 	} while (0);

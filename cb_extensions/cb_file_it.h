@@ -230,7 +230,11 @@ cb_file_it_get_next(cb_file_it* it)
 	cb_bool is_directory = cb_false;
 	const char* found = 0;
 
-	CB_ASSERT(it->has_next);
+    /* On the first iteration has_next could be false if there was no file to iterate at all. */
+	if (!it->has_next)
+	{
+		return cb_false;
+	}
 
 	do
 	{

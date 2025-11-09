@@ -19,3 +19,7 @@
 #endif
 
 BAR_LIB_API int bar_value();
+/* Test for sub directory with same basename bar.c */
+BAR_LIB_API int bar_bar_value();
+/* Test with space in name */
+BAR_LIB_API int bar_b_ar_value();

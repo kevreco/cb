@@ -95,9 +95,9 @@ int main(void)
     //const char* common_h = "D:/kevin/project42/cb/tests/extensions/cb_incremental_build/src/common.h";
     
     /* To test file with space */
-    cb_add(cb_FILES, "src/bar/b ar.c");
+    /*cb_add(cb_FILES, "src/bar/b ar.c");*/
     /* To test file with same name but different paths */
-    cb_add(cb_FILES, "src/bar/bar.c");
+    /*cb_add(cb_FILES, "src/bar/bar.c"); */
     cb_add(cb_FILES, bar_c);
     cb_add(cb_FILES, foo_c);
     

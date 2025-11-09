@@ -557,10 +557,38 @@ cb_file_close(FILE* file)
 {
 	if (fclose(file) != 0)
 	{
-		cb_log_error("could not close file '%p'\n");
+		cb_log_error("could not close file");
 		return cb_false;
 	}
 	return cb_true;
+}
+
+cb_bool cb_strv_to_file(cb_strv sv, const char* filepath)
+{
+    FILE* f = cb_file_open_readwrite(filepath);
+    if (f)
+    {
+        size_t written = fwrite(sv.data, 1, sv.size, f);
+        if (written != sv.size)
+        {
+            if (ferror(f))
+            {
+                cb_log_error("cb_strv_to_file: write error %s", filepath);
+                return cb_false;
+            }
+            fclose(f);
+            cb_log_error("cb_strv_to_file: error %s", filepath);
+            return cb_false;
+        }
+    }
+
+    if (fclose(f) == EOF) 
+    {
+        cb_log_error("cb_strv_to_file: close error %s", filepath);
+        return cb_false;
+    }
+    
+    return cb_true;
 }
 /*-----------------------------------------------------------------------*/
 /* temporary allocation */
@@ -920,14 +948,28 @@ cb_lexicagraphical_cmp(const char* left, cb_size left_count, const char* right, 
 		: left_count > right_count ?  1 : -1;
 }
 
-
-
 CB_INTERNAL int cb_strv_compare(cb_strv sv, const char* data, cb_size size) { return cb_lexicagraphical_cmp(sv.data, sv.size, data, size); }
 CB_INTERNAL int cb_strv_compare_strv(cb_strv sv, cb_strv other) { return cb_strv_compare(sv, other.data, other.size); }
 CB_INTERNAL int cb_strv_compare_str(cb_strv sv, const char* str) { return cb_strv_compare(sv, str, strlen(str)); }
 CB_INTERNAL cb_bool cb_strv_equals(cb_strv sv, const char* data, cb_size size) { return cb_strv_compare(sv, data, size) == 0; }
 CB_INTERNAL cb_bool cb_strv_equals_strv(cb_strv sv, cb_strv other) { return cb_strv_compare_strv(sv, other) == 0; }
 CB_INTERNAL cb_bool cb_strv_equals_str(cb_strv sv, const char* other) { return cb_strv_compare_strv(sv, cb_strv_make_str(other)) == 0; }
+
+CB_INTERNAL cb_bool
+cb_strv_starts_with(cb_strv left, cb_strv right)
+{
+	cb_strv sub = { 0 };
+	if (left.size < right.size)
+	{
+		return cb_false;
+	}
+
+	sub = cb_strv_make(left.data, right.size);
+    printf("left  :"CB_STRV_FMT " %d\n", CB_STRV_ARG(left), (int)left.size);
+    printf("right :"CB_STRV_FMT " %d\n", CB_STRV_ARG(right), (int)right.size);
+    printf("sub   :"CB_STRV_FMT " %d\n", CB_STRV_ARG(sub), (int)sub.size);
+	return cb_strv_equals_strv(sub, right);
+}
 
 CB_INTERNAL cb_bool
 cb_strv_ends_with(cb_strv left, cb_strv right)
@@ -1681,12 +1723,14 @@ CB_INTERNAL cb_strv
 cb_path_filename(cb_strv path)
 {
 	cb_size pos = cb_rfind2(path, '/', '\\');
-	if (pos != CB_NPOS && pos > 0) {
+	if (pos != CB_NPOS && pos > 0)
+    {
 		return cb_strv_make(path.data + pos + 1 /* plus one because we don't want the slash char */
 			, path.size - pos);
 	}
 	return path;
 }
+
 CB_INTERNAL cb_strv
 cb_path_filename_str(const char* str)
 {
@@ -1699,9 +1743,11 @@ cb_path_basename(cb_strv s)
 	cb_strv filename = cb_path_filename(s);
 
 	if (!cb_strv_equals_str(filename, ".")
-		&& !cb_strv_equals_str(filename, "..")) {
+		&& !cb_strv_equals_str(filename, ".."))
+    {
 		cb_size pos = cb_rfind(filename, '.');
-		if (pos != CB_NPOS && pos > 0) {
+		if (pos != CB_NPOS && pos > 0)
+        {
 			return cb_strv_make(filename.data, pos);
 		}
 	}
@@ -1713,6 +1759,19 @@ cb_path_basename_str(const char* str)
 {
 	return cb_path_basename(cb_strv_make_str(str));
 }
+
+CB_INTERNAL cb_strv
+cb_path_change_extension(cb_strv s, cb_strv ext)
+{
+    cb_strv basename = cb_path_basename(s);
+    
+    size_t len = (basename.data - s.data) + basename.size;
+    cb_strv path_without_extension = cb_strv_make(s.data, len);
+    return cb_tmp_strv_printf(CB_STRV_FMT CB_STRV_FMT,
+        CB_STRV_ARG(path_without_extension), CB_STRV_ARG(ext));
+}
+
+
 /*  #file_iterator */
 
 #define CB_MAX_PATH 1024 /* this is an arbitrary limit */
@@ -1887,6 +1946,130 @@ cb_path_get_absolute_file(const char* path)
 {
 	cb_bool is_directory = cb_false;
 	return cb_path_get_absolute_core(path, is_directory);
+}
+
+
+#if defined(_WIN32) || defined(_WIN64)
+    #include <windows.h>
+
+CB_INTERNAL
+cb_strv cb_get_current_directory()
+{
+    cb_strv result = {0};
+    
+    DWORD buffer_size = GetCurrentDirectory(0, NULL);
+    cb_size string_size = buffer_size - 1;
+    if (buffer_size != 0)
+    {
+        cb_size anchor = cb_tmp_save();
+        char* buffer = (char*)cb_tmp_calloc(buffer_size);
+
+        if (GetCurrentDirectory(buffer_size, buffer))
+        {
+            /* Adjust slashes of the path/ */
+            for(DWORD i = 0 ;  i < string_size - 1; i += 1)
+            {
+                if (buffer[i] == '/' || buffer[i] == '\\')
+                {
+                    buffer[i] =CB_PREFERRED_DIR_SEPARATOR_CHAR;
+                }
+            }
+            /* Remove trailing slash. 
+            if (buffer[string_size - 1] == '/' || buffer[string_size - 1] == '\\')
+            {
+              
+                buffer_size -= 1; *//* Adjuste size without trailing slash */
+             /*}*/
+            printf("%d\n", (int)buffer_size);
+              printf("%d\n", (int)strlen(buffer));
+            CB_ASSERT(string_size == strlen(buffer));
+             
+            return cb_strv_make(buffer, string_size);
+        }
+       
+        cb_tmp_restore(anchor);
+    }
+     // @TODO Handle error
+    return result;
+}
+
+#else
+    #include <unistd.h>
+CB_INTERNAL
+cb_strv get_current_directory()
+    {
+        char* cwd = getcwd(NULL, 0);  // POSIX function to get the current directory
+        cb_strv result = {0};  // Initialize strv with default values (data = NULL, size = 0)
+
+        if (cwd != NULL)
+        {
+            result.data = cwd;
+            result.size = strlen(cwd);  // Set the size of the directory path
+        }
+        
+        return result;  // Return the strv containing the path and its length
+    }
+
+#endif
+
+CB_INTERNAL cb_strv cb_path_get_relative_path(cb_strv abs_path)
+{
+    cb_size n = 0;
+    //char* buffer = (char*)cb_tmp_calloc(FILENAME_MAX);
+    cb_strv result = {0};  // Initialize result structure
+
+    // Ensure the provided path is absolute
+    if (!cb_path_is_absolute(cb_strv_make_str(abs_path.data))) 
+    {
+        cb_log_error("The provided path '%s' is not absolute.", abs_path.data);
+        return result;  // Return an empty result if path is not absolute
+    }
+
+    cb_strv base_path = cb_get_current_directory();
+
+    cb_log_error("ABS PATH '%s'", abs_path.data);
+    cb_log_error("BASE PATH '%s'", base_path.data);
+    
+    cb_bool s = cb_strv_starts_with(abs_path, base_path);
+       cb_log_error("BOOL %d ", s);
+ 
+    // Compare the base_path and absolute_path to calculate the relative part
+    if (s) 
+    {
+        // The paths share a common base, so calculate the relative part
+        n = base_path.size;
+        if (abs_path.data[n] == CB_PREFERRED_DIR_SEPARATOR_CHAR) 
+        {
+            n += 1;  // Skip the directory separator
+        }
+       
+        size_t relative_size = abs_path.size - n;
+        result.data = abs_path.data + n;
+        result.size = relative_size;
+    } 
+    else 
+    {
+        result.data = abs_path.data;
+        result.size = abs_path.size;
+    }
+
+    return result;  // Return the resulting strv
+}
+
+/* Replace slash with dashes to avoid directory error if they do not exists */
+CB_INTERNAL cb_strv cb_path_to_obj_path(cb_strv path)
+{
+    cb_size i = 0;
+    cb_strv res = cb_tmp_strv_printf(CB_STRV_FMT, CB_STRV_ARG(path));
+
+    for(i = 0 ; i < res.size; i +=1)
+    {
+        if (cb_is_directory_separator(res.data[i]))
+        {
+            res.data[i] = '-';
+        }
+    }
+    return res;
 }
 
 CB_INTERNAL char*
@@ -3094,7 +3277,8 @@ cleanup:
 CB_INTERNAL const char*
 cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 {
-	cb_dstr str; /* cl.exe command */
+	cb_dstr str;      /* cl.exe command */
+    cb_dstr str_link; /* /link command */
 	/* @FIXME use an array of string instead to make it straigthforward to follow */
 	cb_dstr str_obj; /* to keep track of the .obj generated and copy them.*/
 	const char* output_dir;       /* Output directory. Contains the directory path of the binary being created. */
@@ -3103,7 +3287,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	cb_kv_range lflag_range = { 0 };
 	cb_kv current = { 0 };       /* Temporary kv to store results. */
 	cb_kv current_lflag = { 0 }; /* Temporary kv to linker flags. */
-	cb_strv basename = { 0 };
+	 /*cb_strv basename = { 0 };*/
 	const char* artefact = NULL; /* Resulting artefact path */
 	const char* ext = "";        /* Resulting artefact extension */
 	const char* _ = "  ";        /* Space to separate command arguments. */
@@ -3117,8 +3301,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
     const char* std_out = NULL;
     const char* std_err = NULL;
     cb_context* ctx = cb_current_context();
-    
-    
+
 	cb_size tmp_index;
 
 	cb_bool at_least_one_source_file = cb_false;
@@ -3131,6 +3314,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	}
 	
 	cb_dstr_init(&str);
+    cb_dstr_init(&str_link);
 	cb_dstr_init(&str_obj);
 
 	/* Get and format output directory */
@@ -3141,7 +3325,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 
 	/* Use /utf-8 by default since it's retrocompatible with utf-8 */
 	/* Use /nologo to avoid undesirable messages in the command line. */
-	cb_dstr_append_f(&str, "%s.exe /utf-8 /nologo ", tc->program);
+	cb_dstr_append_f(&str, "%s /utf-8 /nologo ", tc->program);
 
     cb_plugins_bake_starting();
             
@@ -3159,16 +3343,23 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		cb_set_and_goto(artefact, NULL, exit);
 	}
 
-	if (is_static_library) {
+	if (is_static_library)
+    {
+        /* /c : compile-only, no linking */
+        /* @TODO do we need /VC here? */
 		cb_dstr_append_str(&str, "/c /FC ");
 	}
-	else if (is_shared_library) {
+	else if (is_shared_library)
+    {
 		cb_dstr_append_str(&str, "/LD ");
-	}
+	} else
+    {
+        cb_dstr_append_str(&str, "/c ");
+    }
 
 	/* Add output directory to cl.exe command */
 	/* /Fo"output/directory/" */
-	cb_dstr_append_f(&str, "/Fo\"%s\" ", output_dir);
+	/*cb_dstr_append_f(&str, "/Fo\"%s\" ", output_dir);*/
 
 	ext = is_exe ? ".exe" : ext;
 	ext = is_static_library ? ".lib" : ext;
@@ -3213,8 +3404,95 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
+    /* Compute link string to append to the cl.exe command at a later stage */
+    {
+        /* For each linked project we add the link information to the cl.exe command */
+          
+        range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECTS);
+        if (range.count > 0)
+        {
+            /*cb_dstr_append_str(&str_link, "/link ");*/
+            /* Add linker flags */
+            {
+                lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
+                while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
+                {
+                    cb_dstr_append_strv(&str_link, current_lflag.u.strv);
+                    cb_dstr_append_str(&str_link, _);
+                }
+            }
+
+            /* iterate all the linked projects */
+            while (cb_mmap_range_get_next(&range, &current))
+            {
+                linked_project_name = current.u.strv;
+
+                linked_project = cb_find_project_by_name(linked_project_name);
+                if (!project)
+                {
+                    cb_set_and_goto(artefact, NULL, exit);
+                }
+
+                linked_output_dir = cb_get_output_directory(linked_project, tc);
+
+                /* is shared or static library */
+                if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY)
+                    || cb_property_equals(linked_project, cb_BINARY_TYPE, cb_STATIC_LIBRARY))
+                {
+                    /* /LIBPATH:"output/dir/" "mlib.lib" */
+                    cb_dstr_append_f(&str_link, "/LIBPATH:\"%s\" \"%.*s.lib\" ", linked_output_dir, linked_project_name.size, linked_project_name.data);
+                }
+
+                /* is shared library */
+                if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY))
+                {
+                    path_prefix = cb_tmp_sprintf("%s%.*s", linked_output_dir, linked_project_name.size, linked_project_name.data);
+                    /* .dll */
+                    tmp = cb_tmp_sprintf("%s.dll", path_prefix);
+                    if (!cb_copy_file_to_dir(tmp, output_dir))
+                    {
+                        cb_set_and_goto(artefact, NULL, exit);
+                    }
+
+                    /* .exp */
+                    tmp = cb_tmp_sprintf("%s.exp", path_prefix);
+                    if (!cb_copy_file_to_dir(tmp, output_dir))
+                    {
+                        cb_log_warning("Missing .exp. Shared libraries usually need to have some symbol exported with '__declspec(dllexport)'");
+                        cb_set_and_goto(artefact, NULL, exit);
+                    }
+
+                    /* .lib */
+                    tmp = cb_tmp_sprintf("%s.lib", path_prefix);
+                    if (!cb_copy_file_to_dir(tmp, output_dir))
+                    {
+                        cb_log_warning("Missing .lib file. Shared libraries must create a .lib file for other program to be linked with at compile time.");
+                        cb_set_and_goto(artefact, NULL, exit);
+                    }
+
+                    /* Copy .pdb if there is any. */
+                    tmp = cb_tmp_sprintf("%s.pdb", path_prefix);
+                    cb_try_copy_file_to_dir(tmp, output_dir);
+                }
+            }
+        }
+    }
     
-	/* Append files and .obj */
+    
+	/* Append libraries like gdi32.lib */
+	{
+		range = cb_mmap_get_range_str(&project->mmap, cb_LIBRARIES);
+		while (cb_mmap_range_get_next(&range, &current))
+		{
+			cb_dstr_append_f(&str_link, "\"%s.lib\" ", current.u.strv.data);
+		}
+	}
+
+    
+     cb_strv link_content = cb_strv_make_str(str_link.data);
+    
+	/* Compile source file and create the .obj at the appropriate place. */
+    
 	{
 		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
 		while (cb_mmap_range_get_next(&range, &current))
@@ -3222,155 +3500,169 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
 			tmp_index = cb_tmp_save();
 
-            const char* abs_file = cb_path_get_absolute_file(current.u.strv.data);
-            
-            if (cb_plugins_can_process_file(abs_file))
+            cb_log_important("ABS A FILE0:  %s", current.u.strv.data);
+            const char* abs_file_str = cb_path_get_absolute_file(current.u.strv.data);
+             cb_log_important("ABS A FILE0:  %s", abs_file_str);
+            if (cb_plugins_can_process_file(abs_file_str))
             {
+                 /* add "/c abs/path/file.c /Fo output/dir/abs/path/file.c
+                    to the command string.
+                    NOTE: multiple \c are only allowed in response files */
+                //cb_dstr_append_str(&str, "/c ");
+            
+                cb_strv abs_file = cb_strv_make_str(abs_file_str);
+
                 at_least_one_source_file = cb_true;
                 
-                cb_dstr_append_f(&str, "\"%s\" ", abs_file);
+                //cb_dstr_append_f(&str, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(abs_file));
 
                 cb_plugins_register_file(current.u.strv);
                 
-                cb_tmp_restore(tmp_index);
+                /*cb_tmp_restore(tmp_index);*/
+                cb_strv obj_ext = CB_STRV(".obj");
+                
+                cb_strv relative_path = cb_path_get_relative_path(abs_file);
+                cb_strv relative_path_fmt = cb_path_to_obj_path(relative_path);
+                cb_log_important("RELATIVE FILE:  %s", relative_path.data);
+                cb_log_important("RELATIVE FILE:  %s", relative_path_fmt.data);
+                
+                /* Combine output dir and relative path of the src file. */
+                cb_strv obj_abs_path_tmp = cb_tmp_strv_printf("%s" CB_STRV_FMT, output_dir, CB_STRV_ARG(relative_path_fmt));
+                 cb_log_important("obj_abs_path_tmp:  %s", obj_abs_path_tmp.data);
+                /* Change extension to .obj. */
+                cb_strv obj_abs_path = cb_path_change_extension(obj_abs_path_tmp, obj_ext);
+                cb_log_important("obj_abs_path:  %s", obj_abs_path.data);
+                
+                /* Explicitely set the absolute path of the .obj in the command string and the linker string. */
+                //cb_dstr_append_f(&str,  "/Fo\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
+                
+                //cb_dstr_append_f(&str, CB_STRV_FMT "\" ", CB_STRV_ARG(link_content));
+                
+                cb_strv options_content = cb_strv_make_str(str.data);
+               
+                const char* full_compile_command = cb_tmp_sprintf(
+                    /* Option string content */
+                    CB_STRV_FMT " "
+                    /* Absolute path of the existing source file. */
+                    "\"" CB_STRV_FMT "\" "
+                    /* Absolute path of the resulting .obj file. */
+                    "/Fo\"" CB_STRV_FMT "\" " ,
+                    /* /link string content */
+                    //link_content.size ? "link/" CB_STRV_FMT " " : CB_STRV_FMT " ",
+                    CB_STRV_ARG(options_content),
+                    CB_STRV_ARG(abs_file),
+                    CB_STRV_ARG(obj_abs_path)
+                    //,
+                    //CB_STRV_ARG(link_content)
+                );
+                
+                cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
+                
+                
+                /* Execute cl.exe */
+                cb_log_important("ABS C FILE1:  %s", current.u.strv.data);
+                cb_log_important("ABS C FILE2:  %s", abs_file_str);
+                cb_log_important("ABS C FILE3: %s", abs_file.data);
+                printf("DEBUG CL.EXE: %s \n", full_compile_command);
+                if (at_least_one_source_file)
+                {
 
-                basename = cb_path_basename(current.u.strv);
+                    /* When plugins are used we capture the standard outputs which might be processed by one of the plugin. */
+                    if (ctx->plugin_count > 0)
+                    {
+                        cb_bool also_stderr = cb_true;
+                        cb_process_handle* process_handle = cb_process_to_string(full_compile_command, output_dir, also_stderr);
 
-                cb_dstr_append_f(&str_obj, "\"%.*s.obj\" ", basename.size, basename.data);
+                        if (process_handle == 0)
+                        {
+                            cb_set_and_goto(artefact, NULL, exit);
+                        }
+                        
+                        std_out = cb_process_stdout_string(process_handle);
+                        std_err = cb_process_stderr_string(process_handle);
+                   
+                        cb_plugins_project_processed(std_out, std_err);
+                        
+                        if (cb_process_end(process_handle) != 0)
+                        {
+                            cb_set_and_goto(artefact, NULL, exit);
+                        }
+                    }
+                    else
+                    {
+                        
+                        if (cb_process_in_directory(full_compile_command, output_dir) != 0)
+                        {
+                            cb_set_and_goto(artefact, NULL, exit);
+                        }
+                    }
+                }
             }
+            
+            cb_tmp_restore(tmp_index);
 		}
 	}
 
-	/* Append libraries */
-	{
-		range = cb_mmap_get_range_str(&project->mmap, cb_LIBRARIES);
-		while (cb_mmap_range_get_next(&range, &current))
-		{
-			cb_dstr_append_f(&str, "\"%s.lib\" ", current.u.strv.data);
-		}
-	}
+	
 
-	/* For each linked project we add the link information to the cl.exe command */
-	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECTS);
-	if (range.count > 0)
-	{
-		cb_dstr_append_str(&str, "/link ");
-		/* Add linker flags */
-		{
-			lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
-			while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
-			{
-				cb_dstr_append_strv(&str, current_lflag.u.strv);
-				cb_dstr_append_str(&str, _);
-			}
-		}
-
-		/* iterate all the linked projects */
-		while (cb_mmap_range_get_next(&range, &current))
-		{
-			linked_project_name = current.u.strv;
-
-			linked_project = cb_find_project_by_name(linked_project_name);
-			if (!project)
-			{
-				cb_set_and_goto(artefact, NULL, exit);
-			}
-
-			linked_output_dir = cb_get_output_directory(linked_project, tc);
-
-			/* is shared or static library */
-			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY)
-				|| cb_property_equals(linked_project, cb_BINARY_TYPE, cb_STATIC_LIBRARY))
-			{
-				/* /LIBPATH:"output/dir/" "mlib.lib" */
-				cb_dstr_append_f(&str, "/LIBPATH:\"%s\" \"%.*s.lib\" ", linked_output_dir, linked_project_name.size, linked_project_name.data);
-			}
-
-			/* is shared library */
-			if (cb_property_equals(linked_project, cb_BINARY_TYPE, cb_SHARED_LIBRARY))
-			{
-				path_prefix = cb_tmp_sprintf("%s%.*s", linked_output_dir, linked_project_name.size, linked_project_name.data);
-				/* .dll */
-				tmp = cb_tmp_sprintf("%s.dll", path_prefix);
-				if (!cb_copy_file_to_dir(tmp, output_dir))
-				{
-					cb_set_and_goto(artefact, NULL, exit);
-				}
-
-				/* .exp */
-				tmp = cb_tmp_sprintf("%s.exp", path_prefix);
-				if (!cb_copy_file_to_dir(tmp, output_dir))
-				{
-					cb_log_warning("Missing .exp. Shared libraries usually need to have some symbol exported with '__declspec(dllexport)'");
-					cb_set_and_goto(artefact, NULL, exit);
-				}
-
-				/* .lib */
-				tmp = cb_tmp_sprintf("%s.lib", path_prefix);
-				if (!cb_copy_file_to_dir(tmp, output_dir))
-				{
-					cb_log_warning("Missing .lib file. Shared libraries must create a .lib file for other program to be linked with at compile time.");
-					cb_set_and_goto(artefact, NULL, exit);
-				}
-
-				/* Copy .pdb if there is any. */
-				tmp = cb_tmp_sprintf("%s.pdb", path_prefix);
-				cb_try_copy_file_to_dir(tmp, output_dir);
-			}
-		}
-	}
-
-	/* Execute cl.exe */
+    /* Prepare Response file:
+        https://learn.microsoft.com/en-us/cpp/build/reference/at-specify-a-compiler-response-file?view=msvc-170
     
-    printf("DEBUG CMD: %s \n", str.data);
-    if (at_least_one_source_file)
+    
+   
+    const char* response_file_path = cb_tmp_sprintf("%s/command.txt", output_dir, path_prefix);
+   
+    cb_strv content = cb_strv_make(str.data, str.size);
+    if (!cb_strv_to_file(content, response_file_path))
     {
-        /* When plugins are used we capture the standard outputs which might be processed by one of the plugin. */
-        if (ctx->plugin_count > 0)
-        {
-            cb_bool also_stderr = cb_true;
-            cb_process_handle* process_handle = cb_process_to_string(str.data, output_dir, also_stderr);
-
-            if (process_handle == 0)
-            {
-                cb_set_and_goto(artefact, NULL, exit);
-            }
-            
-            std_out = cb_process_stdout_string(process_handle);
-            std_err = cb_process_stderr_string(process_handle);
-       
-            cb_plugins_project_processed(std_out, std_err);
-            
-            if (cb_process_end(process_handle) != 0)
-            {
-                cb_set_and_goto(artefact, NULL, exit);
-            }
-        }
-        else
-        {
-            
-            if (cb_process_in_directory(str.data, output_dir) != 0)
-            {
-                cb_set_and_goto(artefact, NULL, exit);
-            }
-        }
+        cb_set_and_goto(artefact, NULL, exit);
     }
+  */
+
 	
 	/* Execute lib.exe */
     
 	if (is_static_library)
 	{
+
 		/* lib.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
 		tmp = cb_tmp_sprintf("lib.exe /NOLOGO /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
+        
+        printf("DEBUG LIB.EXE: %s \n", tmp);
 		if (cb_process_in_directory(tmp, output_dir) != 0)
 		{
 			cb_log_error("Could not execute command to build static library\n");
 			cb_set_and_goto(artefact, NULL, exit);
 		}
 	}
+    else if (is_shared_library)
+    {
+        /* link.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
+		tmp = cb_tmp_sprintf("link.exe /NOLOGO /DLL /OUT:\"%s\"  /LIBPATH:\"%s\" %s " CB_STRV_FMT, artefact, output_dir, str_obj.data, CB_STRV_ARG(link_content));
+        
+        printf("DEBUG LINK.EXE: %s \n", tmp);
+		if (cb_process_in_directory(tmp, output_dir) != 0)
+		{
+			cb_log_error("Could not execute command to build static library\n");
+			cb_set_and_goto(artefact, NULL, exit);
+		}
+    }
+    else
+    {
+        /* link.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
+		tmp = cb_tmp_sprintf("link.exe /NOLOGO /OUT:\"%s\"  /LIBPATH:\"%s\" %s " CB_STRV_FMT, artefact, output_dir, str_obj.data, CB_STRV_ARG(link_content));
+        
+        printf("DEBUG LINK.EXE: %s \n", tmp);
+		if (cb_process_in_directory(tmp, output_dir) != 0)
+		{
+			cb_log_error("Could not execute command to build static library\n");
+			cb_set_and_goto(artefact, NULL, exit);
+		}
+    }
 
 exit:
 	cb_dstr_destroy(&str);
+    cb_dstr_destroy(&str_link);
 	cb_dstr_destroy(&str_obj);
 
 	return artefact;

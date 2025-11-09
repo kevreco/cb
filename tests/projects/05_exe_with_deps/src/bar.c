@@ -2,5 +2,5 @@
 
 int bar_value()
 {
-    return 43;
+    return 42;
 }

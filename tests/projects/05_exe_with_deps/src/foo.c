@@ -2,5 +2,5 @@
 
 int foo_value()
 {
-    return 42;
+    return 45;
 }

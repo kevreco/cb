@@ -16,6 +16,8 @@ int main(void)
         cb_set(cb_BINARY_TYPE, cb_STATIC_LIBRARY);
 
         cb_add(cb_FILES, "src/foo.c");
+        cb_add(cb_FILES, "src/foo/foo.c");
+        cb_add(cb_FILES, "src/foo/f oo.c");
 
         path = cb_bake();
 

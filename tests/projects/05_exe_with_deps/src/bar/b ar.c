@@ -2,5 +2,5 @@
 
 int bar_b_ar_value()
 {
-    return 44;
+    return 43;
 }

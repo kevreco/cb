@@ -2156,7 +2156,7 @@ cb_copy_file(const char* src_path, const char* dest_path)
 	DWORD attr = GetFileAttributesW(src_path_w);
 
 	if (attr == INVALID_FILE_ATTRIBUTES) {
-		cb_log_error("Could not retieve file attributes of file '%s' (%d).", src_path, GetLastError());
+		cb_log_error("Could not retrieve file attributes of file '%s' (%d).", src_path, GetLastError());
 		return cb_false;
 	}
 

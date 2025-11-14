@@ -113,28 +113,27 @@ int main(void)
     
     cb_bake();
     
-    cb_log_error("incremental_build_plugin.stat_ignored: %d", incremental_build_plugin.stat_ignored);
-    cb_log_error("incremental_build_plugin.stat_compilable: %d", incremental_build_plugin.stat_compilable);
+    /* First build after all files were changed. All compilation unit must be rebuilt. */
     CB_ASSERT(incremental_build_plugin.stat_ignored == 0);
     CB_ASSERT(incremental_build_plugin.stat_compilable == 2);
  
     set_to_next_fake_time(bar_c);
     
+    /* Only one file must be rebuild after change bar.c */
     cb_bake();
-    
-    cb_log_error("incremental_build_plugin.stat_ignored: %d", incremental_build_plugin.stat_ignored);
-    cb_log_error("incremental_build_plugin.stat_compilable: %d", incremental_build_plugin.stat_compilable);
-    
+
     CB_ASSERT(incremental_build_plugin.stat_ignored == 1);
     CB_ASSERT(incremental_build_plugin.stat_compilable == 1);
     
+    /* No file must be rebuild if we don't change any file. */
     cb_bake();
     
     CB_ASSERT(incremental_build_plugin.stat_ignored == 2);
     CB_ASSERT(incremental_build_plugin.stat_compilable == 0);
-    
+
     set_to_next_fake_time(foo_c);
     
+    /* Only one file must be rebuild after change foo.c */
     cb_bake();
     
     CB_ASSERT(incremental_build_plugin.stat_ignored == 1);
@@ -142,11 +141,13 @@ int main(void)
     
     set_to_next_fake_time(foo_h);
     
+    /* Only one file must be rebuild after change foo.h */
     cb_bake();
     
     CB_ASSERT(incremental_build_plugin.stat_ignored == 1);
     CB_ASSERT(incremental_build_plugin.stat_compilable == 1);
     
+    /* Only one file must be rebuild after change bar.h */
     set_to_next_fake_time(bar_h);
     
     cb_bake();
@@ -156,6 +157,7 @@ int main(void)
     
     set_to_next_fake_time(common_h);
     
+    /* bar.c and foo.c must be rebuild after change common.h */
     cb_bake();
     
     CB_ASSERT(incremental_build_plugin.stat_ignored == 0);
@@ -164,36 +166,56 @@ int main(void)
     set_to_next_fake_time(foo_h);
     set_to_next_fake_time(bar_h);
     
+    /* bar.c and foo.c must be rebuild after change bar.h and foo.h */
     cb_bake();  
-    
-    printf("%d", incremental_build_plugin.stat_ignored);
+
     CB_ASSERT(incremental_build_plugin.stat_ignored == 0);
     CB_ASSERT(incremental_build_plugin.stat_compilable == 2);
     
-    
-    /* All file should be rebuilt if compiler flags are changed */
-    
-    cb_bake();
-    CB_ASSERT(incremental_build_plugin.stat_ignored == 2);
-    CB_ASSERT(incremental_build_plugin.stat_compilable == 0);
-    
-    cb_add(cb_CXFLAGS, "O2");
-    cb_bake();
-    
-    CB_ASSERT(incremental_build_plugin.stat_ignored == 0);
-    CB_ASSERT(incremental_build_plugin.stat_compilable == 2);
-    
+    /* No file must be rebuild if we don't change any file. */
     cb_bake();
     
     CB_ASSERT(incremental_build_plugin.stat_ignored == 2);
     CB_ASSERT(incremental_build_plugin.stat_compilable == 0);
     
+    /* Changing any flag must invalide all compilation unit. */
+    #ifdef _WIN32
+    cb_add(cb_CXFLAGS, "/O2");
+    #else
+       cb_add(cb_CXFLAGS, "-O2");
+    #endif
+    cb_bake();
+    
+    CB_ASSERT(incremental_build_plugin.stat_ignored == 0);
+    CB_ASSERT(incremental_build_plugin.stat_compilable == 2);
+    
+    /* No file must be rebuild if we don't change any file. */
+    cb_bake();
+    
+    CB_ASSERT(incremental_build_plugin.stat_ignored == 2);
+    CB_ASSERT(incremental_build_plugin.stat_compilable == 0);
+    
+    /* Changing the defines must invalide all compilation unit. */
     cb_add(cb_DEFINES, "UNICODE");
     cb_bake();
     
     CB_ASSERT(incremental_build_plugin.stat_ignored == 0);
     CB_ASSERT(incremental_build_plugin.stat_compilable == 2);
     
+    /* No file must be rebuild if we don't change any file. */
+    cb_bake();
+    
+    CB_ASSERT(incremental_build_plugin.stat_ignored == 2);
+    CB_ASSERT(incremental_build_plugin.stat_compilable == 0);
+    
+    /* Changing the include search directories must invalide all compilation unit. */
+    cb_add(cb_INCLUDE_DIRECTORIES, "./");
+    cb_bake();
+    
+    CB_ASSERT(incremental_build_plugin.stat_ignored == 0);
+    CB_ASSERT(incremental_build_plugin.stat_compilable == 2);
+    
+    /* Make sure nothing get recompiled after 0 change. */
     cb_bake();
     
     CB_ASSERT(incremental_build_plugin.stat_ignored == 2);

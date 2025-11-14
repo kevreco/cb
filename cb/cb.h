@@ -263,7 +263,7 @@ struct cb_plugin
     
     cb_bool (*can_process_file)(cb_plugin* plugin, const char* file);
 
-    void (*project_processed)(cb_plugin* plugin, const char* std_out, const char* std_err);
+    void (*file_processed)(cb_plugin* plugin, const char* file, const char* std_out, const char* std_err);
      void (*destroy)(cb_plugin* plugin);
 };
 
@@ -1574,7 +1574,7 @@ cb_plugins_can_process_file(const char* file)
 }
 
 CB_INTERNAL void
-cb_plugins_project_processed(const char* std_out, const char* std_err)
+cb_plugins_file_processed(const char* file, const char* std_out, const char* std_err)
 {
     int i;
     cb_context* ctx = cb_current_context();
@@ -1585,7 +1585,7 @@ cb_plugins_project_processed(const char* std_out, const char* std_err)
        
         CB_ASSERT(plugin);
                
-        plugin->project_processed(plugin, std_out, std_err);
+        plugin->file_processed(plugin, file, std_out, std_err);
     }
 }
 
@@ -3489,11 +3489,9 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
-    
-     cb_strv link_content = cb_strv_make_str(str_link.data);
+    cb_strv link_content = cb_strv_make_str(str_link.data);
     
 	/* Compile source file and create the .obj at the appropriate place. */
-    
 	{
 		range = cb_mmap_get_range_str(&project->mmap, cb_FILES);
 		while (cb_mmap_range_get_next(&range, &current))
@@ -3511,8 +3509,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                 abs_file = cb_strv_make_str(abs_file_str);
 
                 cb_plugins_register_file(current.u.strv);
-                
-           
+
                 obj_ext = cb_strv_make_str(".obj");
                 
                 relative_path = cb_path_get_relative_path(abs_file);
@@ -3536,19 +3533,14 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                     "\"" CB_STRV_FMT "\" "
                     /* Absolute path of the resulting .obj file. */
                     "/Fo\"" CB_STRV_FMT "\" " ,
-                    /* /link string content */
-                    //link_content.size ? "link/" CB_STRV_FMT " " : CB_STRV_FMT " ",
                     CB_STRV_ARG(options_content),
                     CB_STRV_ARG(abs_file),
                     CB_STRV_ARG(obj_abs_path)
-                    //,
-                    //CB_STRV_ARG(link_content)
                 );
                 
                 cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
 
                 /* Execute cl.exe */
-                
 
                 printf("DEBUG CL.EXE: %s \n", full_compile_command);
  
@@ -3566,7 +3558,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                     std_out = cb_process_stdout_string(process_handle);
                     std_err = cb_process_stderr_string(process_handle);
                
-                    cb_plugins_project_processed(std_out, std_err);
+                    cb_plugins_file_processed(abs_file_str, std_out, std_err);
                     
                     if (cb_process_end(process_handle) != 0)
                     {
@@ -3586,21 +3578,6 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
             cb_tmp_restore(tmp_index);
 		}
 	}
-
-    /* Prepare Response file:
-        https://learn.microsoft.com/en-us/cpp/build/reference/at-specify-a-compiler-response-file?view=msvc-170
-    
-    
-   
-    const char* response_file_path = cb_tmp_sprintf("%s/command.txt", output_dir, path_prefix);
-   
-    cb_strv content = cb_strv_make(str.data, str.size);
-    if (!cb_strv_to_file(content, response_file_path))
-    {
-        cb_set_and_goto(artefact, NULL, exit);
-    }
-  */
-
 	
 	/* Execute lib.exe */
     
@@ -3678,21 +3655,21 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 	cb_kv current_lflag = { 0 };
 	 
     const char* abs_file_str = NULL;
-    cb_strv abs_file = {0};
-    cb_strv obj_ext = {0};
-    cb_strv relative_path = {0};
-    cb_strv relative_path_fmt = {0};
-    cb_strv obj_abs_path_tmp = {0};
-    cb_strv obj_abs_path = {0};
-    cb_strv options_content = {0};
+    cb_strv abs_file = { 0 };
+    cb_strv relative_path = { 0 };
+    cb_strv relative_path_fmt = { 0 };
+    cb_strv obj_abs_path_tmp = { 0 };
+    cb_strv obj_abs_path = { 0 };
+    cb_strv dep_abs_path = { 0 };
+    cb_strv options_content = { 0 };
     const char* full_compile_command = NULL;
 
 	const char* linked_output_dir = NULL;
 	cb_strv linked_project_name = { 0 };
 	cb_project_t* linked_project = NULL;
 	const char* tmp = NULL; /* Temp string */
-	const char* _ = "  ";        /* Space to separate command arguments */
-	cb_size tmp_index = 0;           /* to save temporary allocation index */
+	const char* _ = "  ";   /* Space to separate command arguments */
+	cb_size tmp_index = 0;  /* to save temporary allocation index */
     
     /* Full path of the artifact returned from this function */
 	const char* artefact = NULL;
@@ -3740,6 +3717,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 		cb_set_and_goto(artefact, NULL, exit);
 	}
 
+    /* @TODO check if we can get rid of those ext variable */
 	ext = is_exe ? "" : ext; /* do not provide extension to executables on linux */
 	ext = is_static_library ? ".a" : ext;
 	ext = is_shared_library ? ".so" : ext;
@@ -3834,10 +3812,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                 abs_file = cb_strv_make_str(abs_file_str);
 
                 cb_plugins_register_file(current.u.strv);
-                
-            
-                obj_ext = cb_strv_make_str(".o");
-                
+
                 relative_path = cb_path_get_relative_path(abs_file);
                 relative_path_fmt = cb_path_to_obj_path(relative_path);
                 cb_log_important("RELATIVE FILE:  %s", relative_path.data);
@@ -3846,8 +3821,10 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                 /* Combine output dir and relative path of the src file. */
                 obj_abs_path_tmp = cb_tmp_strv_printf("%s" CB_STRV_FMT, output_dir, CB_STRV_ARG(relative_path_fmt));
                  cb_log_important("obj_abs_path_tmp:  %s", obj_abs_path_tmp.data);
-                /* Change extension to .obj. */
-                obj_abs_path = cb_path_change_extension(obj_abs_path_tmp, obj_ext);
+                /* Change extension to .o */
+                obj_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".o"));
+                /* Change extension to .d */
+                dep_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".d"));
                 cb_log_important("obj_abs_path:  %s", obj_abs_path.data);
                 
                 options_content = cb_strv_make_str(str.data);
@@ -3858,12 +3835,12 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                     /* Absolute path of the existing source file. */
                     "\"" CB_STRV_FMT "\" "
                     /* Absolute path of the resulting .o file. */
-                    "-o \"" CB_STRV_FMT "\" " ,
-                    /* /link string content */
-                    //link_content.size ? "link/" CB_STRV_FMT " " : CB_STRV_FMT " ",
+                    "-o \"" CB_STRV_FMT "\" " 
+                    "-MMD -MF \"" CB_STRV_FMT "\" ",
                     CB_STRV_ARG(options_content),
                     CB_STRV_ARG(abs_file),
-                    CB_STRV_ARG(obj_abs_path)
+                    CB_STRV_ARG(obj_abs_path),
+                    CB_STRV_ARG(dep_abs_path)
                 );
                 
                 cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
@@ -3872,13 +3849,15 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                 /* Example: gcc <includes> -c  <c source files> */
                 
                 printf("DEBUG GCC: %s \n", full_compile_command);
- 
-              
+
                 if (cb_process_in_directory(full_compile_command, output_dir) != 0)
                 {
                     cb_set_and_goto(artefact, NULL, exit);
                 }
                 
+                printf("DEBUG DEP: %s \n", dep_abs_path.data);
+
+                cb_plugins_file_processed(abs_file_str, dep_abs_path.data, NULL);
             }
             
             cb_tmp_restore(tmp_index);

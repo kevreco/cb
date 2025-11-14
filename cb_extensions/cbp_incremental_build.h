@@ -16,6 +16,10 @@ This plugin depends on:
 #include "cb_file_info.h"
 #include "cb_file_it.h"
 
+#ifndef _WIN32
+#include "cb_gcc_dep_parser.h"
+#endif
+
 #ifndef CB_SSCANF
 #ifdef _WIN32
 #define CB_SSCANF sscanf_s
@@ -70,11 +74,11 @@ CB_INTERNAL void cbp_ib_bake_starting(cb_plugin* plugin);
 CB_INTERNAL void cbp_ib_register_file(cb_plugin* plugin, cb_strv absolute_filepath);
 CB_INTERNAL const char* cbp_ib_extra_argument(cb_plugin* plugin);
 CB_INTERNAL cb_bool cbp_ib_can_process_file(cb_plugin* plugin, const char* file);
-CB_INTERNAL void cbp_ib_project_processed(cb_plugin* plugin, const char* std_out, const char* std_err);
+CB_INTERNAL void cbp_ib_file_processed(cb_plugin* plugin, const char* file, const char* std_out, const char* std_err);
 CB_INTERNAL void cbp_ib_destroy(cb_plugin* plugin);
 
 /* Write a formated file info line into the dep file */
-CB_INTERNAL void cbp_ib_record_dep_info(FILE* dep_file, cb_strv dep_path);
+CB_INTERNAL void cbp_ib_record_dep_info(FILE* dep_file, const char* file_to_record);
 /* Read a formated file info line from the dep file */
 /* @TODO remove out_size if not used */
 CB_INTERNAL cb_bool cbp_ib_read_dep_info(FILE* file, char* buffer, int buffer_size, size_t* out_size, cb_file_info* file_info);
@@ -82,7 +86,7 @@ CB_INTERNAL cb_bool cbp_ib_read_dep_info(FILE* file, char* buffer, int buffer_si
 CB_INTERNAL cb_bool cbp_ib_check_full_rebuild_needed(cbp_incremental_build* ipb);
 
 CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_folder(const cb_toolchain_t* toolchain, const cb_project_t* project);
-CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_file_name(cbp_incremental_build* ipb, const char* filepath);
+CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_store_filepath(cbp_incremental_build* ipb, const char* filepath);
 
 /*-----------------------------------------------------------------------*/
 /* API implementation */
@@ -97,7 +101,7 @@ CB_API void cbp_incremental_build_init(cbp_incremental_build* plugin)
     plugin->plugin.extra_argument = cbp_ib_extra_argument;
     plugin->plugin.register_file = cbp_ib_register_file;
     plugin->plugin.can_process_file = cbp_ib_can_process_file;
-    plugin->plugin.project_processed = cbp_ib_project_processed;
+    plugin->plugin.file_processed = cbp_ib_file_processed;
     plugin->plugin.destroy = cbp_ib_destroy;
 
     cb_arena_init(&plugin->arena);
@@ -242,7 +246,7 @@ CB_INTERNAL cb_bool cbp_ib_can_process_file(cb_plugin* plugin, const char* file)
     {
         file_need_to_be_compiled = cb_false;
         
-        handle = cbp_ib_format_dep_file_name(ipb, file);
+        handle = cbp_ib_format_dep_store_filepath(ipb, file);
         dep_file_path = handle.strv.data;
         
         /* If the dep_file does not exists, the original file needs to be processed. */
@@ -341,7 +345,7 @@ CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_folder(const cb_toolchain_t* to
 }
 
 /* @TODO write prototype in declaration */
-CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_file_name(cbp_incremental_build* ipb, const char* filepath)
+CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_store_filepath(cbp_incremental_build* ipb, const char* filepath)
 {
     cb_tmp_strv_handle str_handle;
 
@@ -405,131 +409,131 @@ CB_INTERNAL int cbp_ib_is_show_include_line(const char* line)
     return 0;
 }
 
-#define CB_SKIP_WHITESPACES(src) do { while(*(src) == ' ') (src) += 1; } while(0)
+#define CB_SKIP_WHITESPACES(src) do { } while(0)
 
-CB_INTERNAL void cbp_ib_project_processed(cb_plugin* plugin, const char* std_out, const char* std_err)
+CB_INTERNAL void cbp_ib_file_processed(cb_plugin* plugin, const char* file, const char* std_out, const char* std_err)
 {
     (void)std_err;
     
     cbp_incremental_build* ipb = (cbp_incremental_build*)plugin;
 
+    const char* dep_path_start = NULL;
+    const char* dep_path_end = NULL;
+    
     const char* c = std_out;
-    
-    const char* src_path_start;
-    const char* src_path_end;
-    const char* dep_path_start;
-    const char* dep_path_end;
 
-    cb_strv strv_empty = {0};
-    cb_strv src = strv_empty;
-    cbp_ib_node* reg_path_node = ipb->first;
-    
-    FILE* dep_file = 0;;
-    while(*c != '\0')
-    {
-        /* Check if line starts with the marker of the /showIncludes */
-        int prefix_len = cbp_ib_is_show_include_line(c);
-        
-        if(prefix_len > 0)
-        {
-            c += prefix_len;
-            
-            CB_SKIP_WHITESPACES(c);
-            
-            dep_path_start = c;
-            c = strchr(c, '\n');
-            
-            /* End of string reached */
-            if (c == NULL)
-            {
-                break;
-            }
-            
-            dep_path_end = (c > dep_path_start  && c[-1] == '\r' ) ? c - 1 : c;
-           
-            cb_bool source_was_found = src.size > 0;
-            cb_bool dep_file_was_created = dep_file != NULL;
-            cb_bool source_is_valid = source_was_found && dep_file_was_created;
-                
-            if (source_is_valid)
-            {
-                cb_strv dep_path = cb_strv_make(dep_path_start, dep_path_end - dep_path_start);
-                
-                /* Write dep to dep_file if it's not a system include */
-                if (!cb_strv_contains_str(dep_path, "Microsoft Visual Studio"))
-                {
-                    cbp_ib_record_dep_info(dep_file, dep_path);
-                }
-            }
-        }
-        else
-        {
-            src_path_start = c;
-            c = strchr(c, '\n');
-            src_path_end = (c > src_path_start  && c[-1] == '\r' ) ? c - 1 : c;
-           
-            cb_strv maybe_src = cb_strv_make(src_path_start, src_path_end - src_path_start);
-
-            if (reg_path_node)
-            {
-                cb_strv reg = reg_path_node->value;
-                
-                if (cb_strv_ends_with(reg, maybe_src))
-                {
-                    src = reg;
-                    reg_path_node = reg_path_node->next;
-                    
-                    /* If dep file was previously opend, closed it. */
-                    if (dep_file)
-                    {
-                        cb_file_close(dep_file);
-                    }
-                    
-                    /* Ensure src was created as a null-terminated string */
-                    
-                    CB_ASSERT(src.data[src.size] == '\0');
-                    
-                    cb_tmp_strv_handle handle = cbp_ib_format_dep_file_name(ipb, src.data);
-
-                    dep_file = cb_file_open_readwrite(handle.strv.data);
-                    if (dep_file)
-                    {
-                        /* Record current file, it is part of the dependency */
-                        cbp_ib_record_dep_info(dep_file, src);
-                    }
-                    cb_tmp_restore(handle.anchor);
-                }
-                else
-                {
-                    src = strv_empty;
-                }
-            }
-            else
-            {
-                src = strv_empty;
-            }
-            
-            fprintf(stdout, "<SRC:>" CB_STRV_FMT "<:SRC>\n", CB_STRV_ARG(src));
-        }
-        
-        c += 1;
-    }
-    
-    cb_arena_reset(&ipb->arena);
-    
-    /* Close last opened dep file */
+    cb_tmp_strv_handle handle = cbp_ib_format_dep_store_filepath(ipb, file);
+    FILE* dep_file = cb_file_open_readwrite(handle.strv.data);
+      
     if (dep_file)
     {
+        /* Record current file, it is part of the dependency */
+        cbp_ib_record_dep_info(dep_file, file);
+
+        while(*c != '\0')
+        {
+            /* Check if line starts with the marker of the /showIncludes */
+            int prefix_len = cbp_ib_is_show_include_line(c);
+            
+            if(prefix_len > 0)
+            {
+                c += prefix_len;
+                
+                /* Skip whitespaces */
+                while(*(c) == ' ') c += 1;
+                
+                dep_path_start = c;
+                c = strchr(c, '\n');
+                
+                /* End of string reached */
+                if (c == NULL)
+                {
+                    break;
+                }
+                
+                /* Get end path of the current include, removing \n or \r\n */
+                dep_path_end = (c > dep_path_start  && c[-1] == '\r' ) ? c - 1 : c;
+
+                cb_strv dep_path = cb_strv_make(dep_path_start, dep_path_end - dep_path_start);
+                
+                const char* dep_to_record = cb_tmp_sprintf(CB_STRV_FMT, CB_STRV_ARG(dep_path));
+                
+                /* Write dep to dep_file if it's not a system include */
+                cb_bool is_system_file = cb_strv_contains_str(dep_path, "Microsoft Visual Studio");
+                
+                if (!is_system_file)
+                {
+                    cbp_ib_record_dep_info(dep_file, dep_to_record);
+                }
+            }
+            
+            c += 1;
+        }
+        
         cb_file_close(dep_file);
     }
+    
+    cb_tmp_restore(handle.anchor);
 }
 #else
 
-CB_INTERNAL void cbp_ib_project_processed(cb_plugin* plugin, const char* std_out, const char* std_err)
+CB_INTERNAL void cbp_ib_file_processed(cb_plugin* plugin, const char* filepath, const char* gcc_dep_filepath, const char* unused)
 {
+    cbp_incremental_build* ipb = (cbp_incremental_build*)plugin;
+    cb_tmp_strv_handle handle = cbp_ib_format_dep_store_filepath(ipb, filepath);
+    
+    cb_size anchor = 0;
+    cb_strv value = { 0 };
+    cb_gcc_dep_parser parser = { 0 };
+    
+    const char* filepath_str = NULL;
+    int buffer_size = 4096;
+    /*char* buffer_read = cb_tmp_calloc(buffer_size);*/
+    char buffer_read[4096];
+    /*char* dep_read = cb_tmp_calloc(buffer_size);*/
+     char dep_read[4096];
+   FILE* gcc_dep_file_to_read = NULL;
+
+    
+    // Create new file, overwrite if already exists
+    FILE* dep_store_to_write = cb_file_open_readwrite(handle.strv.data);
+   
+    
+    (void)unused;
+     /*
     (void)plugin;
-    (void)std_out;
-    (void)std_err;
+    (void)filepath;
+    (void)gcc_dep_filepath;
+    
+    (void)ipb;
+    (void)handle;
+    */
+    if (dep_store_to_write)
+    {
+        gcc_dep_file_to_read = cb_file_open_readonly(gcc_dep_filepath);
+       
+        if (gcc_dep_file_to_read)
+        {
+            cb_gcc_dep_parser_init(&parser, buffer_read, buffer_size, dep_read, buffer_size);
+            cb_gcc_dep_parser_reset(&parser, gcc_dep_file_to_read);
+            
+            while(cb_gcc_dep_parser_get_next(&parser, gcc_dep_file_to_read, &value))
+            {
+                anchor = cb_tmp_save();
+                
+                filepath_str = cb_tmp_sprintf(CB_STRV_FMT, CB_STRV_ARG(value));
+                cbp_ib_record_dep_info(dep_store_to_write, filepath_str);
+                
+                cb_tmp_restore(anchor);
+            }
+            
+            fclose(gcc_dep_file_to_read);
+        }
+        
+        fclose(dep_store_to_write);
+    }
+    
+    cb_tmp_restore(handle.anchor);
 }
 
 #endif
@@ -543,21 +547,19 @@ CB_INTERNAL void cbp_ib_destroy(cb_plugin* plugin)
     cb_log_important("cbp_ib_destroy\n");
 }
 
-CB_INTERNAL void cbp_ib_record_dep_info(FILE* dep_file, cb_strv dep_path)
+CB_INTERNAL void cbp_ib_record_dep_info(FILE* dep_file, const char* file_to_record)
 {
     cb_size anchor = cb_tmp_save();
-                    
-    const char* dep_path_str = cb_tmp_strv_to_str(dep_path);
-
+                   
     cb_file_info file_info = {0};
     int flags = cb_file_info_ALL;
-    if(!cb_file_info_query(dep_path_str, flags, &file_info))
+    if(!cb_file_info_query(file_to_record, flags, &file_info))
     {
         cb_log_error("could not get file info");
     }
     else
     {
-        fprintf(dep_file, CB_STRV_FMT ";", CB_STRV_ARG(dep_path));
+        fprintf(dep_file, "%s" ";", file_to_record);
         fprintf(dep_file, CB_U64_FMT  ";", file_info.size);
         fprintf(dep_file, CB_U64_FMT  ";", file_info.last_modification);
         fprintf(dep_file, CB_U64_FMT  "\r\n", file_info.hash);
@@ -573,6 +575,7 @@ CB_INTERNAL cb_bool cbp_ib_read_dep_info(FILE* file, char* buffer, int buffer_si
     
     if (fgets(buffer, (size_t)buffer_size, file))
     {
+        /* @TODO try to use memchr instead of strcspn? */
         /* Get span until next separator */
         const char* chars = ";";
         size_t len = strcspn(buffer, chars);
@@ -630,6 +633,7 @@ CB_INTERNAL cb_bool cbp_ib_check_full_rebuild_needed(cbp_incremental_build* ipb)
         cb_CXFLAGS,
         "cflags", // @TODO use cb_CFLAGS
         "cxxflags", // @TODO use cb_CXXLAGS
+        cb_INCLUDE_DIRECTORIES
     };
     
     if (flag_dep_file_read)

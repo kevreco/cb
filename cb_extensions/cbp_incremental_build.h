@@ -627,12 +627,11 @@ CB_INTERNAL cb_bool cbp_ib_check_full_rebuild_needed(cbp_incremental_build* ipb)
     cb_u64 cached_flag_len = 0;
     cb_u64 cached_flag_hash = 0;
 
-
     static const char* properties[] = {
         cb_DEFINES,
         cb_CXFLAGS,
-        "cflags", // @TODO use cb_CFLAGS
-        "cxxflags", // @TODO use cb_CXXLAGS
+        "cflags", // @TODO use cb_CFLAGS ?
+        "cxxflags", // @TODO use cb_CXXLAGS ?
         cb_INCLUDE_DIRECTORIES
     };
     
@@ -660,8 +659,6 @@ CB_INTERNAL cb_bool cbp_ib_check_full_rebuild_needed(cbp_incremental_build* ipb)
         fclose(flag_dep_file_read);
     }
 
-cb_log_important("cbp_ib_check_full_rebuild_needed 5");
- 
     flag_hash = cb_hash_64_init();
 
     prop_count = sizeof(properties) / sizeof(properties[0]);
@@ -679,11 +676,6 @@ cb_log_important("cbp_ib_check_full_rebuild_needed 5");
             flag_len += (cb_u64)strv.size;
         }
     }
-
-    cb_log_important("flag_hash:" CB_U64_FMT, flag_hash);
-    cb_log_important("flag_len:" CB_U64_FMT, flag_len);
-    cb_log_important("cached_flag_hash:" CB_U64_FMT, cached_flag_hash);
-    cb_log_important("cached_flag_len:" CB_U64_FMT, cached_flag_len);
 
     if (cached_value_retrieved)
     {

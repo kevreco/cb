@@ -1,4 +1,9 @@
 
+v0.0.3
+
+Extension: Properly impelement cb_baked_binary_already_exists.
+Feature: Add internal function cb_current_project_name.
+
 v0.0.2
 
 Fix: Bug where file with same name but different path would generate .o or .obj overwriting each other.

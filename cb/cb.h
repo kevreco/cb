@@ -1403,6 +1403,15 @@ cb_current_project(void)
 	return ctx->current_project;
 }
 
+CB_INTERNAL const char*
+cb_current_project_name(void)
+{
+	cb_context* ctx = cb_current_context();
+	CB_ASSERT(ctx->current_project);
+	if (!ctx) { return NULL; }
+	return ctx->current_project->name.data;
+}
+
 /*-----------------------------------------------------------------------*/
 /* plugins */
 /*-----------------------------------------------------------------------*/

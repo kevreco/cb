@@ -1,4 +1,9 @@
 
+v0.0.4
+
+Fix: Bug related to incremental build when a file is skipped. .o/.obj was not in the list to linked.
+Feature: Add cb_msvc_parse_reset to offload msvc include files parsing, and make it easier to understand.
+
 v0.0.3
 
 Extension: Properly impelement cb_baked_binary_already_exists.

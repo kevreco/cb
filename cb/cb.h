@@ -2,11 +2,11 @@
 #define CB_H
 
 #ifdef CB_VERSION
-#define CB_VERSION "0.0.3"
+#define CB_VERSION "0.0.4"
 #endif
 
 #ifdef CB_VERSION_NUM
-#define CB_VERSION_NUM 000003
+#define CB_VERSION_NUM 000004
 #endif
 
 #define CB_IMPLEMENTATION

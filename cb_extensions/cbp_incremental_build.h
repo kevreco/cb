@@ -1,26 +1,23 @@
 /*
 
 This plugin depends on:
-  cb_arena.h
+
+  cb_dep_parser.h (Unix)
   cb_hash.h
   cb_file_io.h
   cb_file_info.h
   cb_file_it.h
-  cb_gcc_dep_parser.h (Unix)
-  
+
 */
 
 #ifndef CB_PLUGIN_INCREMENTAL_BUILD_H
 #define CB_PLUGIN_INCREMENTAL_BUILD_H
 
+#include "cb_dep_parser.h"
 #include "cb_hash.h"
 #include "cb_file_io.h"
 #include "cb_file_info.h"
 #include "cb_file_it.h"
-
-#ifndef _WIN32
-#include "cb_gcc_dep_parser.h"
-#endif
 
 #ifndef CB_SSCANF
 #ifdef _WIN32
@@ -320,95 +317,42 @@ CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_file_in_dep_directory(cbp_increment
 
 #ifdef _WIN32
 
-/* WIN32-only
-   If it's an 'include line entry' displayed by \showIncludes,
-   returns the length of the line, otherwise returns 0 */
-CB_INTERNAL cb_size cbp_ib_is_show_include_line(const char* line)
-{
-    static cb_strv prefixes[] = {
-        CB_STRV("Note: including file: "),              /* English */
-        CB_STRV("Remarque : inclusion du fichier :  "), /* French */
-        CB_STRV("Hinweis: Einlesen der Datei: "),       /* German */
-        CB_STRV("Nota: file incluso  "),                /* Italian */
-        CB_STRV("注意: 包含文件:  "),                    /* Chinese */
-        CB_STRV("メモ: インクルード ファイル:  ")               /* Japanese */
-    };
-    
-    int sizeof_array = sizeof(prefixes) / sizeof(prefixes[0]);
-    
-    for(int i = 0; i < sizeof_array; i += 1)
-    {
-        if (strncmp(line, prefixes[i].data, prefixes[i].size) == 0)
-        {
-            return prefixes[i].size;
-        }
-    }
-    
-    return 0;
-}
 
 CB_INTERNAL void cbp_ib_file_processed(cb_plugin* plugin, const char* file, const char* std_out, const char* std_err)
 {
     cbp_incremental_build* ib = (cbp_incremental_build*)plugin;
 
-    const char* dep_path_start = NULL;
-    const char* dep_path_end = NULL;
-    
-    const char* c = std_out;
-
+    cb_size anchor = 0;
+    cb_strv value = { 0 };
+    cb_dep_parser parser = { 0 };
+    const char* filepath_str = NULL;
+  
     cb_tmp_strv_handle handle = cbp_ib_format_dep_store_filepath(ib, file);
 
-    FILE* dep_store_file = cb_file_open_write(handle.strv.data);
+    FILE* dep_store_to_write = cb_file_open_write(handle.strv.data);
       
     (void)std_err;
     
-    if (dep_store_file)
+    if (dep_store_to_write)
     {
-        /* Record current file, it is part of the dependency */
-        cbp_ib_dep_store_write_info(dep_store_file, file);
-
-        /* Parse all files output by \showIncludes */
-        while(*c != '\0')
+         /* Record current file, it is part of the dependency */
+        cbp_ib_dep_store_write_info(dep_store_to_write, file);
+        
+        cb_msvc_dep_parser_init(&parser);
+            
+        cb_msvc_dep_parser_reset(&parser, std_out);
+        
+        while(cb_msvc_dep_parser_get_next(&parser, std_out, &value))
         {
-            /* Check if line starts with the marker of the /showIncludes */
-            cb_size prefix_len = cbp_ib_is_show_include_line(c);
+            anchor = cb_tmp_save();
             
-            if(prefix_len > 0)
-            {
-                c += prefix_len;
-                
-                /* Skip whitespaces */
-                while(*(c) == ' ') c += 1;
-                
-                dep_path_start = c;
-                c = strchr(c, '\n');
-                
-                /* End of string reached */
-                if (c == NULL)
-                {
-                    break;
-                }
-                
-                /* Get end path of the current include, removing \n or \r\n */
-                dep_path_end = (c > dep_path_start  && c[-1] == '\r' ) ? c - 1 : c;
-
-                cb_strv dep_path = cb_strv_make(dep_path_start, dep_path_end - dep_path_start);
-                
-                const char* dep_to_record = cb_tmp_sprintf(CB_STRV_FMT, CB_STRV_ARG(dep_path));
-                
-                /* Write dep to dep_store_file if it's not a system include */
-                cb_bool is_system_file = cb_strv_contains_str(dep_path, "Microsoft Visual Studio");
-                
-                if (!is_system_file)
-                {
-                    cbp_ib_dep_store_write_info(dep_store_file, dep_to_record);
-                }
-            }
+            filepath_str = cb_tmp_sprintf(CB_STRV_FMT, CB_STRV_ARG(value));
+            cbp_ib_dep_store_write_info(dep_store_to_write, filepath_str);
             
-            c += 1;
+            cb_tmp_restore(anchor);
         }
         
-        fclose(dep_store_file);
+        fclose(dep_store_to_write);
     }
     
     cb_tmp_restore(handle.anchor);
@@ -423,7 +367,7 @@ CB_INTERNAL void cbp_ib_file_processed(cb_plugin* plugin, const char* filepath, 
     
     cb_size anchor = 0;
     cb_strv value = { 0 };
-    cb_gcc_dep_parser parser = { 0 };
+    cb_dep_parser parser = { 0 };
     
     const char* filepath_str = NULL;
     int buffer_size = 4096;
@@ -444,6 +388,7 @@ CB_INTERNAL void cbp_ib_file_processed(cb_plugin* plugin, const char* filepath, 
         if (gcc_dep_file_to_read)
         {
             cb_gcc_dep_parser_init(&parser, buffer_read, buffer_size, dep_read, buffer_size);
+            
             cb_gcc_dep_parser_reset(&parser, gcc_dep_file_to_read);
             
             while(cb_gcc_dep_parser_get_next(&parser, gcc_dep_file_to_read, &value))

@@ -1,0 +1,3 @@
+hello.o
+Note: including file: my/p a t h/foo.h
+メモ: インクルード ファイル:   my/p a t h/bar.h

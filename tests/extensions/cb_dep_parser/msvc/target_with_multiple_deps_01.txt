@@ -1,0 +1,3 @@
+hello.o
+Note: including file: foo.h
+Note: including file:  bar.h

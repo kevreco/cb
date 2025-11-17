@@ -3182,12 +3182,13 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 
     /* Relative path of the source. */
     cb_strv relative_path = { 0 };
-    cb_strv relative_path_fmt = { 0} ;
+    cb_strv relative_path_fmt = { 0 } ;
     cb_strv obj_abs_path_tmp = { 0 };
     /* Absolute path of the object generated. */
     cb_strv obj_abs_path = { 0 };
     cb_strv options_content = { 0 };
-                
+    cb_bool can_process_file = cb_false;
+   
 	cb_size tmp_index = 0;
 
 	project = cb_find_project_by_name_str(project_name);
@@ -3252,8 +3253,8 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 			tmp_index = cb_tmp_save();
 
             abs_file_str = cb_path_get_absolute_file(current.u.strv.data);
-
-            if (cb_plugins_can_process_file(abs_file_str))
+            can_process_file = cb_plugins_can_process_file(abs_file_str);
+            
             {
                 abs_file = cb_strv_make_str(abs_file_str);
 
@@ -3265,7 +3266,10 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 
                 /* Change extension to .obj. */
                 obj_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".obj"));
-
+            }
+            
+            if (can_process_file)
+            {
                 /* /utf-8: by default since it's retrocompatible with utf-8 */
                 /* /nologo: to avoid undesirable messages in the command line. */
                 /* /c: compile only since we run the linker after all source file have beenc ompiled. */
@@ -3284,8 +3288,6 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                     CB_STRV_ARG(obj_abs_path)
                 );
                 
-                cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
-
                 /* Execute cl.exe */
                 
                 /* When plugins are used we capture the standard outputs which might be processed by one of the plugin. */
@@ -3317,6 +3319,9 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                     }
                 }
             }
+            
+            cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
+
             
             cb_tmp_restore(tmp_index);
 		}
@@ -3499,6 +3504,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
     cb_strv dep_abs_path = { 0 };
     cb_strv options_content = { 0 };
     const char* full_compile_command = NULL;
+    cb_bool can_process_file = cb_false;
 
 	const char* linked_output_dir = NULL;
 	cb_strv linked_project_name = { 0 };
@@ -3576,8 +3582,8 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 			tmp_index = cb_tmp_save();
 
             abs_file_str = cb_path_get_absolute_file(current.u.strv.data);
-
-            if (cb_plugins_can_process_file(abs_file_str))
+            can_process_file = cb_plugins_can_process_file(abs_file_str);
+            
             {
                 abs_file = cb_strv_make_str(abs_file_str);
 
@@ -3589,9 +3595,13 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 
                 /* Change extension to .o */
                 obj_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".o"));
+            }
+            
+            if (can_process_file)
+            {
                 /* Change extension to .d */
                 dep_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".d"));
-                
+               
                 full_compile_command = cb_tmp_sprintf(
                     "%s "
                     /* Option string content */
@@ -3608,8 +3618,6 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                     CB_STRV_ARG(dep_abs_path)
                 );
                 
-                cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
-
                 /* Execute gcc */
                 /* Example: gcc <includes> -c  <c source files> */
                 
@@ -3620,6 +3628,8 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                 
                 cb_plugins_file_processed(abs_file_str, dep_abs_path.data, NULL);
             }
+            
+            cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
             
             cb_tmp_restore(tmp_index);
 		}

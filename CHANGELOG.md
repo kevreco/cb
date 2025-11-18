@@ -1,4 +1,8 @@
 
+v0.0.5
+
+Fix: Windows: Deadlock related to stdout/stderr and child process.
+
 v0.0.4
 
 Fix: Bug related to incremental build when a file is skipped. .o/.obj was not in the list to linked.

@@ -2727,7 +2727,7 @@ cb_process_core(cb_process_handle* handle)
 	SECURITY_ATTRIBUTES saAttr;         /* To create the pipes. */
 
 	DWORD exit_code = (DWORD) -1;
-	DWORD wait_result = 0;
+	BOOL child_running = 0;
 	DWORD byte_read_from_buffer = 0;
 	char process_output_buffer[256] = { 0 };
 	BOOL handles_inheritance = 0;
@@ -2779,6 +2779,7 @@ cb_process_core(cb_process_handle* handle)
 
 			si.hStdOutput = process_stdout_write;
 		}
+
 		if (handle->stderr_to_string)
 		{
 			/* Create a pipe for the child process's stderr. */
@@ -2817,55 +2818,67 @@ cb_process_core(cb_process_handle* handle)
 	}
 
 	/* Close the write ends of the pipes since they will not be used in the parent process. */
-	
 	if (handle->stdout_to_string)
+    {
 		CloseHandle(process_stdout_write);
+    }
+
 	if (handle->stderr_to_string)
+    {
 		CloseHandle(process_stderr_write);
+    }
 
-	wait_result = WaitForSingleObject(
-		pi.hProcess, /* HANDLE hHandle, */
-		INFINITE     /* DWORD  dwMilliseconds */
-	);
+    for (;;)
+    {
+        child_running =
+            WaitForSingleObject(pi.hProcess, 0) == WAIT_TIMEOUT;
 
-	if (wait_result == WAIT_FAILED)
-	{
-		cb_log_error("Could not wait on child process: %lu", GetLastError());
-	}
-	else
-	{
-		if (GetExitCodeProcess(pi.hProcess, &exit_code))
-		{
-			if (exit_code != 0)
-			{
-				cb_log_debug("Command exited with exit code %lu", exit_code);
-			}
-		}
-		else
-		{
-			cb_log_error("Could not get process exit code: %lu", GetLastError());
-		}
-	}
+        if (handle->stdout_to_string)
+        {
+            /* Read output from the child process's pipe for stdout. Stop when there is no more data. */
+            while (ReadFile(process_stdout_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
+                && byte_read_from_buffer != 0)
+            {
+                cb_dstr_append_f(&handle->stdout_string, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
+            }
+        }
+        
+        if (handle->stderr_to_string)
+        {
+            while (ReadFile(process_stderr_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
+                && byte_read_from_buffer != 0)
+            {
+                cb_dstr_append_f(&handle->stderr_string, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
+            }
+        }
+        
+        if (!child_running)
+        {
+            break;
+        }
+        
+        Sleep(10);
+    }
+    
+    if (GetExitCodeProcess(pi.hProcess, &exit_code))
+    {
+        if (exit_code != 0)
+        {
+            cb_log_debug("Command exited with exit code %lu", exit_code);
+        }
+    }
+    else
+    {
+        cb_log_error("Could not get process exit code: %lu", GetLastError());
+    }
 
 	if (handle->stdout_to_string)
 	{
-		/* Read output from the child process's pipe for stdout. Stop when there is no more data. */
-		while (ReadFile(process_stdout_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
-			&& byte_read_from_buffer != 0)
-		{
-			cb_dstr_append_f(&handle->stdout_string, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
-		}
 		CloseHandle(process_stdout_read);
 	}
 
 	if (handle->stderr_to_string)
 	{
-		while (ReadFile(process_stderr_read, process_output_buffer, sizeof(process_output_buffer), &byte_read_from_buffer, NULL)
-			&& byte_read_from_buffer != 0)
-		{
-			cb_dstr_append_f(&handle->stderr_string, "%.*s", (int)byte_read_from_buffer, process_output_buffer);
-		}
-
 		CloseHandle(process_stderr_read);
 	}
 

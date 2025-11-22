@@ -3210,7 +3210,9 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	{
 		return NULL;
 	}
-	
+
+	cb_log_trace("Start baking... %s", project_name);
+
 	cb_dstr_init(&str_options);
     cb_dstr_init(&str_link);
 	cb_dstr_init(&str_obj);
@@ -3265,9 +3267,17 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 			/* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
 			tmp_index = cb_tmp_save();
 
+			/* Fail compilation if a file does not exists. */
             abs_file_str = cb_path_get_absolute_file(current.u.strv.data);
+
+			if (!cb_path_exists(abs_file_str))
+			{
+				cb_log_error("File does not exists: %s", abs_file_str);
+				cb_set_and_goto(artefact, NULL, exit);
+			}
+	
             can_process_file = cb_plugins_can_process_file(abs_file_str);
-            
+
             {
                 abs_file = cb_strv_make_str(abs_file_str);
 
@@ -3594,7 +3604,15 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
             /* Absolute file is created using the tmp buffer allocator but we don't need it once it's inserted into the dynamic string */
 			tmp_index = cb_tmp_save();
 
-            abs_file_str = cb_path_get_absolute_file(current.u.strv.data);
+			/* Fail compilation if a file does not exists. */
+			abs_file_str = cb_path_get_absolute_file(current.u.strv.data);
+
+			if (!cb_path_exists(abs_file_str))
+			{
+				cb_log_error("File does not exists: %s", abs_file_str);
+				cb_set_and_goto(artefact, NULL, exit);
+			}
+
             can_process_file = cb_plugins_can_process_file(abs_file_str);
             
             {
@@ -3634,6 +3652,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                 /* Execute gcc */
                 /* Example: gcc <includes> -c  <c source files> */
                 
+                /* Return if exist with non zero. */
                 if (cb_process_in_directory(full_compile_command, output_dir) != 0)
                 {
                     cb_set_and_goto(artefact, NULL, exit);

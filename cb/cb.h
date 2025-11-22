@@ -3326,9 +3326,13 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                     
                     std_out = cb_process_stdout_string(process_handle);
                     std_err = cb_process_stderr_string(process_handle);
-               
-                    cb_plugins_file_processed(abs_file_str, std_out, std_err);
-                    
+           
+                    /* Only mark the file as processed if the command line was correctly run */
+                    if (process_handle->exit_code == 0)
+                    {
+                        cb_plugins_file_processed(abs_file_str, std_out, std_err);
+                    }
+
                     if (cb_process_end(process_handle) != 0)
                     {
                         cb_set_and_goto(artefact, NULL, exit);

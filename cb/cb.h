@@ -3178,7 +3178,8 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	const char* artefact = NULL; /* Resulting artefact path */
 	const char* _ = "  ";        /* Space to separate command arguments. */
 	const char* tmp = "";
-	
+	const char* error_msg = "";
+
 	cb_strv linked_project_name = { 0 };
 	cb_project_t* linked_project = NULL;
 	const char* linked_output_dir; /* to keep track of the .obj generated */
@@ -3447,7 +3448,6 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 	cb_bool is_static_library = cb_property_equals(project, cb_BINARY_TYPE, cb_STATIC_LIBRARY);
 
 	/* Execute lib.exe or link.exe */
-    
     if (is_exe)
     {
         /* Possible artefact name: my/path/my_program.exe */
@@ -3455,6 +3455,8 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
         
         /* link.exe /NOLOGO /OUT:"output/dir/my_program.exe" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
 		tmp = cb_tmp_sprintf("link.exe /NOLOGO /OUT:\"%s\"  /LIBPATH:\"%s\" %s " CB_STRV_FMT, artefact, output_dir, str_obj.data, CB_STRV_ARG(link_content));
+
+		error_msg = "Could not execute command to build executable: %s";
     }
 	else if (is_static_library)
 	{
@@ -3463,6 +3465,8 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
         
 		/* lib.exe /NOLOGO /OUT:"output/dir/my_lib.lib" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
 		tmp = cb_tmp_sprintf("lib.exe /NOLOGO /OUT:\"%s\"  /LIBPATH:\"%s\" %s ", artefact, output_dir, str_obj.data);
+
+		error_msg = "Could not execute command to build static library: %s";
 	}
     else if (is_shared_library)
     {
@@ -3471,7 +3475,9 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
         
         /* link.exe /NOLOGO /DLL /OUT:"output/dir/my_lib.dll" /LIBPATH:"output/dir/" a.obj b.obj c.obj ... */
 		tmp = cb_tmp_sprintf("link.exe /NOLOGO /DLL /OUT:\"%s\"  /LIBPATH:\"%s\" %s " CB_STRV_FMT, artefact, output_dir, str_obj.data, CB_STRV_ARG(link_content));
-    }
+		
+		error_msg = "Could not execute command to build shared library: %s";
+	}
     else
     {
         cb_log_error("Unknown binary type");
@@ -3480,7 +3486,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
     
     if (cb_process_in_directory(tmp, output_dir) != 0)
     {
-        cb_log_error("Could not execute command to build static library\n");
+        cb_log_error(error_msg, project_name);
         cb_set_and_goto(artefact, NULL, exit);
     }
 
@@ -3542,6 +3548,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
     
     /* Full path of the artifact returned from this function */
 	const char* artefact = NULL;
+	const char* error_msg = "";
 
 	cb_project_t* project = NULL;
     
@@ -3744,7 +3751,9 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
         artefact = cb_tmp_sprintf("%s%s", output_dir, project_name);
         
         /* gcc /my/path/mylib.o /my/path/myotherlib.o -o /my/path/my_program -L/my/path/libs -lother -lm */
-        tmp = cb_tmp_sprintf("%s %s -o \"%s\" %s", tc->program, str_obj.data, artefact, str_link.data);     
+        tmp = cb_tmp_sprintf("%s %s -o \"%s\" %s", tc->program, str_obj.data, artefact, str_link.data);
+
+		error_msg = "Could not execute command to build executable: %s";
     }
 	else if (is_static_library)
 	{
@@ -3754,6 +3763,8 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
         /* Create libXXX.a in the output directory */
         /* Example: ar -crs libMyLib.a MyObjectAo MyObjectB.o */
         tmp = cb_tmp_sprintf("ar -crs \"%s\" %s ", artefact, str_obj.data);
+
+		error_msg = "Could not execute command to build static library: %s";
 	}
     else if (is_shared_library)
     {
@@ -3762,6 +3773,8 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
         
         /* gcc -shared /my/path/mylib.o /my/path/myotherlib.o  -o /my/path/libmylibrary.so -L/my/path/libs -lother -lm */
         tmp = cb_tmp_sprintf("%s -shared %s -o \"%s\" %s", tc->program, str_obj.data, artefact, str_link.data);
+
+		error_msg = "Could not execute command to build shared library: %s";
     }
     else
     {
@@ -3771,6 +3784,7 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 
     if (cb_process_in_directory(tmp, output_dir) != 0)
     {
+		cb_log_error(error_msg, project_name);
         cb_set_and_goto(artefact, NULL, exit);
     }
  

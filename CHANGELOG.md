@@ -1,3 +1,12 @@
+v0.0.7
+
+Fix: Display error in cae the build is failing when using the incremental build.
+
+v0.0.6
+
+Fix: Windows: Stop compilation when exit code is non-zero.
+Fix: Stop compilation if a source file does not exist.
+Fix: Fix some error messages.
 
 v0.0.5
 

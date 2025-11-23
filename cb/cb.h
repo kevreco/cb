@@ -3333,6 +3333,17 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                     {
                         cb_plugins_file_processed(abs_file_str, std_out, std_err);
                     }
+					else
+					{
+						if (std_out)
+						{
+							cb_log_error(std_out);
+						}
+						if (std_err)
+						{
+							cb_log_error(std_err);
+						}
+					}
 
                     if (cb_process_end(process_handle) != 0)
                     {

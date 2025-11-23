@@ -2562,7 +2562,7 @@ cb_add_file(const char* file)
 
 /* Properties are just (strv) values from the map of a project. */
 CB_INTERNAL cb_bool
-try_get_property(cb_project_t* project, const char* key, cb_kv* result)
+try_get_property(const cb_project_t* project, const char* key, cb_kv* result)
 {
 	if (cb_mmap_try_get_first(&project->mmap, cb_strv_make_str(key), result))
 	{
@@ -2572,7 +2572,7 @@ try_get_property(cb_project_t* project, const char* key, cb_kv* result)
 }
 
 CB_INTERNAL cb_bool
-try_get_property_strv(cb_project_t* project, const char* key, cb_strv* result)
+try_get_property_strv(const cb_project_t* project, const char* key, cb_strv* result)
 {
 	cb_kv kv_result;
 	if (cb_mmap_try_get_first(&project->mmap, cb_strv_make_str(key), &kv_result))
@@ -2584,7 +2584,7 @@ try_get_property_strv(cb_project_t* project, const char* key, cb_strv* result)
 }
 
 CB_INTERNAL cb_bool
-cb_property_equals(cb_project_t* project, const char* key, const char* comparison_value)
+cb_property_equals(const cb_project_t* project, const char* key, const char* comparison_value)
 {
 	cb_strv result;
 	return try_get_property_strv(project, key, &result)
@@ -2619,7 +2619,7 @@ cb_bake_with(cb_toolchain_t toolchain)
 }
 
 CB_INTERNAL const char*
-cb_get_output_directory(cb_project_t* project, const cb_toolchain_t* tc)
+cb_get_output_directory(const cb_project_t* project, const cb_toolchain_t* tc)
 {
 	cb_strv out_dir;
 	if (try_get_property_strv(project, cb_OUTPUT_DIR, &out_dir))

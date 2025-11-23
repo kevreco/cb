@@ -275,9 +275,11 @@ CB_INTERNAL cb_bool cbp_ib_can_process_file(cb_plugin* plugin, const char* file)
 CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_folder(const cb_toolchain_t* toolchain, const cb_project_t* project)
 {
     cb_tmp_strv_handle str_handle;
-    
+    const char* output_dir = "";
     str_handle.anchor = cb_tmp_save();
-    str_handle.strv = cb_tmp_strv_printf("%s/cbp_ib_cache/" CB_STRV_FMT "/", toolchain->default_directory_base, CB_STRV_ARG(project->name));
+
+    output_dir = cb_get_output_directory(project, toolchain);
+    str_handle.strv = cb_tmp_strv_printf("%s/cbp_ib_cache/" , output_dir);
 
     return str_handle;
 }
@@ -285,6 +287,7 @@ CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_folder(const cb_toolchain_t* to
 CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_store_filepath(cbp_incremental_build* ib, const char* filepath)
 {
     cb_tmp_strv_handle str_handle;
+    const char* output_dir = "";
 
     cb_file_info file_info = {0};
     int flags = cb_file_info_FILE_ID;
@@ -293,9 +296,10 @@ CB_INTERNAL cb_tmp_strv_handle cbp_ib_format_dep_store_filepath(cbp_incremental_
     CB_ASSERT(ok);
     
     str_handle.anchor = cb_tmp_save();
-    
-    str_handle.strv = cb_tmp_strv_printf("%s/cbp_ib_cache/" CB_STRV_FMT "/%zu-%zu-" CB_STRV_FMT ".cache", ib->toolchain.default_directory_base, CB_STRV_ARG(ib->project->name), file_info.volume_id, file_info.file_id, CB_STRV_ARG(cb_path_filename_str(filepath)));
-   
+    output_dir = cb_get_output_directory(ib->project, &ib->toolchain);
+    str_handle.strv = cb_tmp_strv_printf("%s/cbp_ib_cache/%zu-%zu-" CB_STRV_FMT ".cache",
+        output_dir, file_info.volume_id, file_info.file_id, CB_STRV_ARG(cb_path_filename_str(filepath)));
+
     return str_handle;
 }
 

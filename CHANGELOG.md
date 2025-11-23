@@ -1,3 +1,7 @@
+v0.0.8
+
+Fix: Incremental build: Create cache under the output directory.
+
 v0.0.7
 
 Fix: Display error in cae the build is failing when using the incremental build.

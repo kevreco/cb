@@ -3197,7 +3197,6 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
     /* Relative path of the source. */
     cb_strv relative_path = { 0 };
     cb_strv relative_path_fmt = { 0 } ;
-    cb_strv obj_abs_path_tmp = { 0 };
     /* Absolute path of the object generated. */
     cb_strv obj_abs_path = { 0 };
     cb_strv options_content = { 0 };
@@ -3286,10 +3285,7 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                 relative_path_fmt = cb_path_to_obj_path(relative_path);
 
                 /* Combine output dir and relative path of the src file. */
-                obj_abs_path_tmp = cb_tmp_strv_printf("%s" CB_STRV_FMT, output_dir, CB_STRV_ARG(relative_path_fmt));
-
-                /* Change extension to .obj. */
-                obj_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".obj"));
+                obj_abs_path = cb_tmp_strv_printf("%s" CB_STRV_FMT ".obj", output_dir, CB_STRV_ARG(relative_path_fmt));
             }
             
             if (can_process_file)
@@ -3359,9 +3355,13 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
                 }
             }
             
-            cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
+            /* Sometimes a .c or .cpp file is empty which does not create any obj file.
+               Therefore we need prevent it to get into the obj list. */
+            if (cb_path_exists(obj_abs_path.data))
+			{
+                cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
+            }
 
-            
             cb_tmp_restore(tmp_index);
 		}
 	}
@@ -3543,7 +3543,6 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
     cb_strv abs_file = { 0 };
     cb_strv relative_path = { 0 };
     cb_strv relative_path_fmt = { 0 };
-    cb_strv obj_abs_path_tmp = { 0 };
     cb_strv obj_abs_path = { 0 };
     cb_strv dep_abs_path = { 0 };
     cb_strv options_content = { 0 };
@@ -3644,16 +3643,13 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                 relative_path_fmt = cb_path_to_obj_path(relative_path);
 
                 /* Combine output dir and relative path of the src file. */
-                obj_abs_path_tmp = cb_tmp_strv_printf("%s" CB_STRV_FMT, output_dir, CB_STRV_ARG(relative_path_fmt));
-
-                /* Change extension to .o */
-                obj_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".o"));
+                obj_abs_path = cb_tmp_strv_printf("%s" CB_STRV_FMT ".o", output_dir, CB_STRV_ARG(relative_path_fmt));
             }
             
             if (can_process_file)
             {
                 /* Change extension to .d */
-                dep_abs_path = cb_path_change_extension(obj_abs_path_tmp, cb_strv_make_str(".d"));
+                dep_abs_path = cb_path_change_extension(obj_abs_path, cb_strv_make_str(".d"));
                
                 full_compile_command = cb_tmp_sprintf(
                     "%s "
@@ -3683,7 +3679,12 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
                 cb_plugins_file_processed(abs_file_str, dep_abs_path.data, NULL);
             }
             
-            cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
+            /* Sometimes a .c or .cpp file is empty which does not create any obj file.
+               Therefore we need prevent it to get into the obj list. */
+            if (cb_path_exists(obj_abs_path.data))
+			{
+                cb_dstr_append_f(&str_obj, "\"" CB_STRV_FMT "\" ", CB_STRV_ARG(obj_abs_path));
+            }
             
             cb_tmp_restore(tmp_index);
 		}

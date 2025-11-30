@@ -1,3 +1,7 @@
+v0.0.9
+
+Fix: .obj/.o were overwritten if there was multiple like like main.c and main.cpp
+
 v0.0.8
 
 Fix: Incremental build: Create cache under the output directory.

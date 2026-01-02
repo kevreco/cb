@@ -3366,6 +3366,16 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
+    /* Add linker flags */
+    {
+        lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
+                while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
+                {
+                    cb_dstr_append_strv(&str_link, current_lflag.u.strv);
+                    cb_dstr_append_str(&str_link, _);
+        }
+    }
+            
     /* Compute link string to append to the cl.exe command at a later stage */
     {
         /* For each linked project we add the link information to the cl.exe command */
@@ -3373,16 +3383,6 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
         range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECTS);
         if (range.count > 0)
         {
-            /* Add linker flags */
-            {
-                lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
-                while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
-                {
-                    cb_dstr_append_strv(&str_link, current_lflag.u.strv);
-                    cb_dstr_append_str(&str_link, _);
-                }
-            }
-
             /* Iterate all the linked projects */
             while (cb_mmap_range_get_next(&range, &current))
             {
@@ -3699,20 +3699,20 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
 		}
 	}
 
-	/* For each linked project we add the link information to the gcc command */
-	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECTS);
-	if (range.count > 0)
-	{
-		/* Add linker flags */
-		{
-			lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
+    /* Add linker flags */
+    {
+        lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
 			while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
 			{
 				cb_dstr_append_strv(&str_link, current_lflag.u.strv);
 				cb_dstr_append_str(&str_link, _);
-			}
-		}
-
+        }
+    }
+        
+	/* For each linked project we add the link information to the gcc command */
+	range = cb_mmap_get_range_str(&project->mmap, cb_LINK_PROJECTS);
+	if (range.count > 0)
+	{
 		/* Give some parameters to the linker to look for the shared library next to the binary being built */
 		cb_dstr_append_str(&str_link, " -Wl,-rpath,$ORIGIN ");
 

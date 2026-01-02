@@ -35,7 +35,7 @@ struct cb_dep_parser {
     size_t end;
     
     /* Buffer containing a part of the file being parsed. */
-    char* read_buffer;  // read buffer
+    char* read_buffer;
     size_t read_buffer_size;
     
     /* Buffer containing the dependency path if found. */

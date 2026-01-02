@@ -1,4 +1,3 @@
-// platform.h
 #ifndef CB_PLATFORM_H
 #define CB_PLATFORM_H
 

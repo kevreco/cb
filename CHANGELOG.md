@@ -1,3 +1,7 @@
+v0.0.10
+
+Fix: Linker flags were not taking into account if there was no project dependencies.
+
 v0.0.9
 
 Fix: .obj/.o were overwritten if there was multiple like like main.c and main.cpp

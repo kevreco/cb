@@ -2,11 +2,11 @@
 #define CB_H
 
 #ifdef CB_VERSION
-#define CB_VERSION "0.0.9"
+#define CB_VERSION "0.0.10"
 #endif
 
 #ifdef CB_VERSION_NUM
-#define CB_VERSION_NUM 000009
+#define CB_VERSION_NUM 000010
 #endif
 
 #define CB_IMPLEMENTATION
@@ -3369,10 +3369,10 @@ cb_toolchain_msvc_bake(cb_toolchain_t* tc, const char* project_name)
     /* Add linker flags */
     {
         lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
-                while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
-                {
-                    cb_dstr_append_strv(&str_link, current_lflag.u.strv);
-                    cb_dstr_append_str(&str_link, _);
+        while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
+        {
+            cb_dstr_append_strv(&str_link, current_lflag.u.strv);
+            cb_dstr_append_str(&str_link, _);
         }
     }
             
@@ -3702,10 +3702,10 @@ cb_toolchain_gcc_bake(cb_toolchain_t* tc, const char* project_name)
     /* Add linker flags */
     {
         lflag_range = cb_mmap_get_range_str(&project->mmap, cb_LFLAGS);
-			while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
-			{
-				cb_dstr_append_strv(&str_link, current_lflag.u.strv);
-				cb_dstr_append_str(&str_link, _);
+        while (cb_mmap_range_get_next(&lflag_range, &current_lflag))
+        {
+            cb_dstr_append_strv(&str_link, current_lflag.u.strv);
+            cb_dstr_append_str(&str_link, _);
         }
     }
         
